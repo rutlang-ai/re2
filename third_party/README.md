@@ -6,6 +6,8 @@ Vendored header dependencies (no external downloads are needed to build RE2):
   three-way search honor custom comparators. RE2 supplies a malloc-based allocator.
   The aliased resize fill-value fix is included upstream via
   [clapdb/Containa#67](https://github.com/clapdb/Containa/pull/67).
+  The aliased insertion-value fix is applied locally and proposed upstream in
+  [clapdb/Containa#68](https://github.com/clapdb/Containa/pull/68).
 - SmallString: https://github.com/clapdb/smallstring at 23612dd40e9af84e61d110def089b74ae743f29d.
   Local changes replace throw paths with abort, constrain iterator overloads to non-integral
   types, check malloc failures, retain the inline-size invariant in Release, accelerate

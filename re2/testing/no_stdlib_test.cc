@@ -132,7 +132,26 @@ static int CheckAliasedVectorResize() {
   return 0;
 }
 
+static int CheckAliasedVectorInsert() {
+  for (bool reserve : {false, true}) {
+    re2::Vector<int> values{11, 42};
+    if (reserve) values.reserve(16);
+    auto result = values.insert(values.begin(), values[1]);
+    VERIFY(result == values.begin());
+    VERIFY(values.size() == 3);
+    VERIFY(values[0] == 42 && values[1] == 11 && values[2] == 42);
+    re2::Vector<re2::String> strings{re2::String(100, 'a'), re2::String(100, 'b')};
+    if (reserve) strings.reserve(16);
+    strings.insert(strings.begin(), strings[1]);
+    VERIFY(strings[0] == re2::String(100, 'b'));
+    VERIFY(strings[1] == re2::String(100, 'a'));
+    VERIFY(strings[2] == re2::String(100, 'b'));
+  }
+  return 0;
+}
+
 int main() {
+  VERIFY(CheckAliasedVectorInsert() == 0);
   VERIFY(CheckAliasedVectorResize() == 0);
   VERIFY(CheckStringCharacterFind() == 0);
   VERIFY(CheckAliasedAppend() == 0);
