@@ -9,6 +9,8 @@ Vendored header dependencies (no external downloads are needed to build RE2):
   types, check malloc failures, retain the inline-size invariant in Release, accelerate
   inline capture assignment and use the vendored fmt include path. The malloc-backed small_string is used.
   The character-search bounds fix is included upstream via [clapdb/smallstring#13](https://github.com/clapdb/smallstring/pull/13).
+  The aliased-append safety fix is applied locally and proposed upstream in
+  [clapdb/smallstring#14](https://github.com/clapdb/smallstring/pull/14).
 - fmt: https://github.com/fmtlib/fmt at 9908d00037d58233bcb1a7c99153bb96363994df.
   Only base.h, format.h and format-inl.h are needed by SmallString's formatter declarations.
   RE2 does not instantiate fmt formatting functions; its diagnostics use C stdio.

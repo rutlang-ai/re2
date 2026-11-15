@@ -60,8 +60,28 @@ static int CheckStringCharacterFind() {
   return 0;
 }
 
+static int CheckAliasedAppend() {
+  re2::String str(100, 'x');
+  str.append(str.data(), str.size());
+  VERIFY(str == re2::String(200, 'x'));
+  str = re2::String(100, 'y');
+  str.append(re2::StringView(str));
+  VERIFY(str == re2::String(200, 'y'));
+  str = re2::String(100, 'z');
+  str.append(str.begin(), str.end());
+  VERIFY(str == re2::String(200, 'z'));
+  str = re2::String("abcdef");
+  str.append(str.rbegin(), str.rend());
+  VERIFY(str == "abcdeffedcba");
+  str = re2::String("abcdef");
+  str.append(str.data(), str.size() + 1);
+  VERIFY(str == re2::String("abcdefabcdef\0", 13));
+  return 0;
+}
+
 int main() {
   VERIFY(CheckStringCharacterFind() == 0);
+  VERIFY(CheckAliasedAppend() == 0);
   re2::String text = "hello-123";
   re2::String word;
   int number = 0;
