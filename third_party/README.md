@@ -1,10 +1,10 @@
 Vendored header dependencies (no external downloads are needed to build RE2):
 
-- Containa: https://github.com/clapdb/Containa at f8cae273839d29d4136f3787373cfde7ea983b5a.
+- Containa: https://github.com/clapdb/Containa at c11126f7daab4da402b6e494a2a2ad0155f55fcd.
   Only the seven used container headers are included. Local changes replace throw paths with
   abort, remove unused exception rollback code and iostream debug logging, and make B-tree
   three-way search honor custom comparators. RE2 supplies a malloc-based allocator.
-  The aliased resize fill-value fix is applied locally and proposed upstream in
+  The aliased resize fill-value fix is included upstream via
   [clapdb/Containa#67](https://github.com/clapdb/Containa/pull/67).
 - SmallString: https://github.com/clapdb/smallstring at 23612dd40e9af84e61d110def089b74ae743f29d.
   Local changes replace throw paths with abort, constrain iterator overloads to non-integral
