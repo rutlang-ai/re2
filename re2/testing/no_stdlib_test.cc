@@ -27,7 +27,41 @@ static void* MatchThread(void*) {
   }
   return nullptr;
 }
+static int CheckStringCharacterFind() {
+  using re2::String;
+  auto quoted = RE2::QuoteMeta("abc");
+  VERIFY(quoted.find('\0', 4) == String::npos);
+  VERIFY(quoted.find('b') == 1);
+  VERIFY(quoted.find('b', 1) == 1);
+  VERIFY(quoted.find('b', 2) == String::npos);
+
+  // Exercise empty, inline, short and larger heap-backed strings.
+  const size_t lengths[] = {0, 3, 6, 7, 255, 256, 16384};
+  for (size_t length : lengths) {
+    String str(length, 'a');
+    const size_t positions[] = {length, length + 1,
+                                static_cast<size_t>(String::npos),
+                                static_cast<size_t>(-1)};
+    for (size_t pos : positions) {
+      VERIFY(str.find('\0', pos) == String::npos);
+      VERIFY(str.find('a', pos) == String::npos);
+      VERIFY(str.find('z', pos) == String::npos);
+    }
+    if (length != 0) {
+      str[length - 1] = 'z';
+      VERIFY(str.find('z') == length - 1);
+      VERIFY(str.find('z', length - 1) == length - 1);
+    }
+  }
+  String binary("a\0b", 3);
+  VERIFY(binary.find('\0') == 1);
+  VERIFY(binary.find('\0', 1) == 1);
+  VERIFY(binary.find('\0', 2) == String::npos);
+  return 0;
+}
+
 int main() {
+  VERIFY(CheckStringCharacterFind() == 0);
   re2::String text = "hello-123";
   re2::String word;
   int number = 0;

@@ -7,7 +7,8 @@ Vendored header dependencies (no external downloads are needed to build RE2):
 - SmallString: https://github.com/clapdb/smallstring at a0741c50a6e87227ef6e5af5bb0c7feeb22e3aa4.
   Local changes replace throw paths with abort, constrain iterator overloads to non-integral
   types, check malloc failures, retain the inline-size invariant in Release, accelerate
-  inline capture assignment and use the vendored fmt include path. The malloc-backed small_string is used.
+  inline capture assignment, guard out-of-range character-search positions and use the
+  vendored fmt include path. The malloc-backed small_string is used.
 - fmt: https://github.com/fmtlib/fmt at 9908d00037d58233bcb1a7c99153bb96363994df.
   Only base.h, format.h and format-inl.h are needed by SmallString's formatter declarations.
   RE2 does not instantiate fmt formatting functions; its diagnostics use C stdio.
