@@ -79,9 +79,51 @@ static int CheckAliasedAppend() {
   return 0;
 }
 
+static int CheckAliasedInsert() {
+  re2::String str(100, 'x');
+  str.insert(size_t{0}, str.data(), str.size());
+  VERIFY(str == re2::String(200, 'x'));
+  str = re2::String("abcdef");
+  str.reserve(32);
+  str.insert(size_t{1}, str.data() + 2, 3);
+  VERIFY(str == "acdebcdef");
+  str = re2::String(100, 'y');
+  str.insert(size_t{0}, str);
+  VERIFY(str == re2::String(200, 'y'));
+  str = re2::String("abcdef");
+  auto inserted = str.insert(str.begin() + 2, str.begin() + 1, str.end());
+  VERIFY(str == "abbcdefcdef");
+  VERIFY(inserted == str.begin() + 2);
+  str = re2::String("abcdef");
+  inserted = str.insert(str.begin() + 2, str.rbegin(), str.rend());
+  VERIFY(str == "abfedcbacdef");
+  VERIFY(inserted == str.begin() + 2);
+  return 0;
+}
+
+static int CheckViewReplaceOffsets() {
+  re2::String str("abcdef");
+  str.replace(1, 2, re2::StringView("XYZ"), 0, 2);
+  VERIFY(str == "aXYdef");
+  str = re2::String("abcdefghij");
+  str.replace(8, 2, re2::StringView("XYZ"), 1, 2);
+  VERIFY(str == "abcdefghYZ");
+  str = re2::String("abcdef");
+  str.replace(1, 2, re2::StringView("XYZ"), 1, 100);
+  VERIFY(str == "aYZdef");
+  str = re2::String("abcdef");
+  str.replace(1, 2, re2::StringView(str), 0, 2);
+  VERIFY(str == "aabdef");
+  str.replace(1, 2, re2::StringView(), 0, 0);
+  VERIFY(str == "adef");
+  return 0;
+}
+
 int main() {
   VERIFY(CheckStringCharacterFind() == 0);
   VERIFY(CheckAliasedAppend() == 0);
+  VERIFY(CheckAliasedInsert() == 0);
+  VERIFY(CheckViewReplaceOffsets() == 0);
   re2::String text = "hello-123";
   re2::String word;
   int number = 0;
