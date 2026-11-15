@@ -5,6 +5,8 @@
 #ifndef RE2_POD_ARRAY_H_
 #define RE2_POD_ARRAY_H_
 
+#include "re2/support.h"
+
 #include <memory>
 #include <type_traits>
 
@@ -19,7 +21,7 @@ class PODArray {
   PODArray()
       : ptr_() {}
   explicit PODArray(int len)
-      : ptr_(std::allocator<T>().allocate(len), Deleter(len)) {}
+      : ptr_(re2::Allocator<T>().allocate(len), Deleter(len)) {}
 
   T* data() const {
     return ptr_.get();
@@ -41,7 +43,7 @@ class PODArray {
         : len_(len) {}
 
     void operator()(T* ptr) const {
-      std::allocator<T>().deallocate(ptr, len_);
+      re2::Allocator<T>().deallocate(ptr, len_);
     }
 
     int len_;

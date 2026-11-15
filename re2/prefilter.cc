@@ -6,13 +6,9 @@
 
 #include <stddef.h>
 
-#include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/str_format.h"
+#include "re2/support.h"
 #include "re2/re2.h"
 #include "re2/regexp.h"
 #include "re2/unicode_casefold.h"
@@ -28,7 +24,7 @@ Prefilter::Prefilter(Op op) {
   op_ = op;
   subs_ = NULL;
   if (op_ == AND || op_ == OR)
-    subs_ = new std::vector<Prefilter*>;
+    subs_ = new re2::Vector<Prefilter*>;
 }
 
 // Destroys a Prefilter.
@@ -152,21 +148,21 @@ void Prefilter::SimplifyStringSet(SSet* ss) {
   // The SSet sorts strings by length, then lexicographically. Note that
   // smaller strings appear first and all strings must be unique. These
   // observations let us skip string comparisons when possible.
-  SSIter i = ss->begin();
-  if (i != ss->end() && i->empty()) {
-    ++i;
-  }
-  for (; i != ss->end(); ++i) {
-    SSIter j = i;
-    ++j;
-    while (j != ss->end()) {
-      if (j->size() > i->size() && j->find(*i) != std::string::npos) {
-        j = ss->erase(j);
-        continue;
+  // B-tree erasure can relocate every iterator. Filter a snapshot first.
+  re2::Vector<re2::String> keep;
+  for (const auto& candidate : *ss) {
+    bool redundant = false;
+    for (const auto& shorter : keep) {
+      if (!shorter.empty() && shorter.size() < candidate.size() &&
+          candidate.find(shorter) != re2::String::npos) {
+        redundant = true;
+        break;
       }
-      ++j;
     }
+    if (!redundant) keep.push_back(candidate);
   }
+  ss->clear();
+  for (auto& str : keep) ss->insert(std::move(str));
 }
 
 Prefilter* Prefilter::OrStrings(SSet* ss) {
@@ -196,7 +192,7 @@ static Rune ToLowerRuneLatin1(Rune r) {
   return r;
 }
 
-Prefilter* Prefilter::FromString(const std::string& str) {
+Prefilter* Prefilter::FromString(const re2::String& str) {
   Prefilter* m = new Prefilter(Prefilter::ATOM);
   m->atom_ = str;
   return m;
@@ -226,7 +222,7 @@ class Prefilter::Info {
   static Info* AnyMatch();
 
   // Format Info as a string.
-  std::string ToString();
+  re2::String ToString();
 
   // Caller takes ownership of the Prefilter.
   Prefilter* TakeMatch();
@@ -273,10 +269,10 @@ Prefilter* Prefilter::Info::TakeMatch() {
 }
 
 // Format a Info in string form.
-std::string Prefilter::Info::ToString() {
+re2::String Prefilter::Info::ToString() {
   if (is_exact_) {
     int n = 0;
-    std::string s;
+    re2::String s;
     for (SSIter i = exact_.begin(); i != exact_.end(); ++i) {
       if (n++ > 0)
         s += ",";
@@ -302,8 +298,8 @@ void Prefilter::CrossProduct(const SSet& a, const SSet& b, SSet* dst) {
 Prefilter::Info* Prefilter::Info::Concat(Info* a, Info* b) {
   if (a == NULL)
     return b;
-  ABSL_DCHECK(a->is_exact_);
-  ABSL_DCHECK(b && b->is_exact_);
+  RE2_DCHECK(a->is_exact_);
+  RE2_DCHECK(b && b->is_exact_);
   Info *ab = new Info();
 
   CrossProduct(a->exact_, b->exact_, &ab->exact_);
@@ -388,15 +384,15 @@ Prefilter::Info* Prefilter::Info::Plus(Info *a) {
   return ab;
 }
 
-static std::string RuneToString(Rune r) {
+static re2::String RuneToString(Rune r) {
   char buf[UTFmax];
   int n = runetochar(buf, &r);
-  return std::string(buf, n);
+  return re2::String(buf, n);
 }
 
-static std::string RuneToStringLatin1(Rune r) {
+static re2::String RuneToStringLatin1(Rune r) {
   char c = r & 0xff;
-  return std::string(&c, 1);
+  return re2::String(&c, 1);
 }
 
 // Constructs Info for literal rune.
@@ -452,9 +448,9 @@ typedef CharClass::iterator CCIter;
 Prefilter::Info* Prefilter::Info::CClass(CharClass *cc,
                                          bool latin1) {
   if (ExtraDebug) {
-    ABSL_LOG(ERROR) << "CharClassInfo:";
+    RE2_LOG(ERROR) << "CharClassInfo:";
     for (CCIter i = cc->begin(); i != cc->end(); ++i)
-      ABSL_LOG(ERROR) << "  " << i->lo << "-" << i->hi;
+      RE2_LOG(ERROR) << "  " << i->lo << "-" << i->hi;
   }
 
   // If the class is too large, it's okay to overestimate.
@@ -475,7 +471,7 @@ Prefilter::Info* Prefilter::Info::CClass(CharClass *cc,
   a->is_exact_ = true;
 
   if (ExtraDebug)
-    ABSL_LOG(ERROR) << " = " << a->ToString();
+    RE2_LOG(ERROR) << " = " << a->ToString();
 
   return a;
 }
@@ -503,7 +499,7 @@ class Prefilter::Info::Walker : public Regexp::Walker<Prefilter::Info*> {
 
 Prefilter::Info* Prefilter::BuildInfo(Regexp* re) {
   if (ExtraDebug)
-    ABSL_LOG(ERROR) << "BuildPrefilter::Info: " << re->ToString();
+    RE2_LOG(ERROR) << "BuildPrefilter::Info: " << re->ToString();
 
   bool latin1 = (re->parse_flags() & Regexp::Latin1) != 0;
   Prefilter::Info::Walker w(latin1);
@@ -533,7 +529,7 @@ Prefilter::Info* Prefilter::Info::Walker::PostVisit(
     default:
     case kRegexpRepeat:
       info = EmptyString();
-      ABSL_LOG(DFATAL) << "Bad regexp op " << re->op();
+      RE2_LOG(DFATAL) << "Bad regexp op " << re->op();
       break;
 
     case kRegexpNoMatch:
@@ -636,7 +632,7 @@ Prefilter::Info* Prefilter::Info::Walker::PostVisit(
   }
 
   if (ExtraDebug)
-    ABSL_LOG(ERROR) << "BuildInfo " << re->ToString()
+    RE2_LOG(ERROR) << "BuildInfo " << re->ToString()
                     << ": " << (info ? info->ToString() : "");
 
   return info;
@@ -661,11 +657,11 @@ Prefilter* Prefilter::FromRegexp(Regexp* re) {
   return m;
 }
 
-std::string Prefilter::DebugString() const {
+re2::String Prefilter::DebugString() const {
   switch (op_) {
     default:
-      ABSL_LOG(DFATAL) << "Bad op in Prefilter::DebugString: " << op_;
-      return absl::StrFormat("op%d", op_);
+      RE2_LOG(DFATAL) << "Bad op in Prefilter::DebugString: " << op_;
+      return re2::internal::StrFormat("op%d", op_);
     case NONE:
       return "*no-matches*";
     case ATOM:
@@ -673,7 +669,7 @@ std::string Prefilter::DebugString() const {
     case ALL:
       return "";
     case AND: {
-      std::string s = "";
+      re2::String s = "";
       for (size_t i = 0; i < subs_->size(); i++) {
         if (i > 0)
           s += " ";
@@ -683,7 +679,7 @@ std::string Prefilter::DebugString() const {
       return s;
     }
     case OR: {
-      std::string s = "(";
+      re2::String s = "(";
       for (size_t i = 0; i < subs_->size(); i++) {
         if (i > 0)
           s += "|";

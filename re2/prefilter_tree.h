@@ -16,12 +16,8 @@
 // atoms) that the user of this class should use to do the string
 // matching.
 
-#include <string>
-#include <vector>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
+#include "re2/support.h"
 #include "re2/prefilter.h"
 #include "re2/sparse_array.h"
 
@@ -44,15 +40,15 @@ class PrefilterTree {
   // The caller should use the returned set of strings to do string matching.
   // Each time a string matches, the corresponding index then has to be
   // and passed to RegexpsGivenStrings below.
-  void Compile(std::vector<std::string>* atom_vec);
+  void Compile(re2::Vector<re2::String>* atom_vec);
 
   // Given the indices of the atoms that matched, returns the indexes
   // of regexps that should be searched.  The matched_atoms should
   // contain all the ids of string atoms that were found to match the
   // content. The caller can use any string match engine to perform
   // this function. This function is thread safe.
-  void RegexpsGivenStrings(const std::vector<int>& matched_atoms,
-                           std::vector<int>* regexps) const;
+  void RegexpsGivenStrings(const re2::Vector<int>& matched_atoms,
+                           re2::Vector<int>* regexps) const;
 
   // Print debug prefilter. Also prints unique ids associated with
   // nodes of the prefilter of the regexp.
@@ -63,21 +59,21 @@ class PrefilterTree {
 
   struct PrefilterHash {
     size_t operator()(const Prefilter* a) const {
-      ABSL_DCHECK(a != NULL);
-      return absl::Hash<Prefilter>()(*a);
+      RE2_DCHECK(a != NULL);
+      return re2::internal::Hash<Prefilter>()(*a);
     }
   };
 
   struct PrefilterEqual {
     bool operator()(const Prefilter* a, const Prefilter* b) const {
-      ABSL_DCHECK(a != NULL);
-      ABSL_DCHECK(b != NULL);
+      RE2_DCHECK(a != NULL);
+      RE2_DCHECK(b != NULL);
       return *a == *b;
     }
   };
 
   using NodeSet =
-      absl::flat_hash_set<Prefilter*, PrefilterHash, PrefilterEqual>;
+      re2::internal::flat_hash_set<Prefilter*, PrefilterHash, PrefilterEqual>;
 
   // Each unique node has a corresponding Entry that helps in
   // passing the matching trigger information along the tree.
@@ -94,11 +90,11 @@ class PrefilterTree {
     // are two different nodes, but they share the atom 'def'. So when
     // 'def' matches, it triggers two parents, corresponding to the two
     // different OR nodes.
-    std::vector<int> parents;
+    re2::Vector<int> parents;
 
     // When this node is ready to trigger the parent, what are the
     // regexps that are triggered.
-    std::vector<int> regexps;
+    re2::Vector<int> regexps;
   };
 
   // Returns true if the prefilter node should be kept.
@@ -107,10 +103,10 @@ class PrefilterTree {
   // This function assigns unique ids to various parts of the
   // prefilter, by looking at if these nodes are already in the
   // PrefilterTree.
-  void AssignUniqueIds(NodeSet* nodes, std::vector<std::string>* atom_vec);
+  void AssignUniqueIds(NodeSet* nodes, re2::Vector<re2::String>* atom_vec);
 
   // Given the matching atoms, find the regexps to be triggered.
-  void PropagateMatch(const std::vector<int>& atom_ids,
+  void PropagateMatch(const re2::Vector<int>& atom_ids,
                       IntMap* regexps) const;
 
   // Returns the prefilter node that has the same atom/subs as this
@@ -119,24 +115,24 @@ class PrefilterTree {
   Prefilter* CanonicalNode(NodeSet* nodes, Prefilter* node);
 
   // Recursively constructs a readable prefilter string.
-  std::string DebugNodeString(Prefilter* node) const;
+  re2::String DebugNodeString(Prefilter* node) const;
 
   // Used for debugging.
   void PrintDebugInfo(NodeSet* nodes);
 
   // These are all the nodes formed by Compile. Essentially, there is
   // one node for each unique atom and each unique AND/OR node.
-  std::vector<Entry> entries_;
+  re2::Vector<Entry> entries_;
 
   // indices of regexps that always pass through the filter (since we
   // found no required literals in these regexps).
-  std::vector<int> unfiltered_;
+  re2::Vector<int> unfiltered_;
 
   // vector of Prefilter for all regexps.
-  std::vector<Prefilter*> prefilter_vec_;
+  re2::Vector<Prefilter*> prefilter_vec_;
 
   // Atom index in returned strings to entry id mapping.
-  std::vector<int> atom_index_to_id_;
+  re2::Vector<int> atom_index_to_id_;
 
   // Has the prefilter tree been compiled.
   bool compiled_;

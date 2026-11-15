@@ -12,26 +12,20 @@
 
 #include <string>
 
-#include "absl/base/macros.h"
-#include "absl/flags/flag.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/escaping.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 #include "re2/prog.h"
 #include "re2/re2.h"
 #include "re2/regexp.h"
 #include "util/pcre.h"
 
-ABSL_FLAG(bool, dump_prog, false, "dump regexp program");
-ABSL_FLAG(bool, log_okay, false, "log successful runs");
-ABSL_FLAG(bool, dump_rprog, false, "dump reversed regexp program");
+RE2_FLAG(bool, dump_prog, false, "dump regexp program");
+RE2_FLAG(bool, log_okay, false, "log successful runs");
+RE2_FLAG(bool, dump_rprog, false, "dump reversed regexp program");
 
-ABSL_FLAG(int, max_regexp_failures, 100,
+RE2_FLAG(int, max_regexp_failures, 100,
           "maximum number of regexp test failures (-1 = unlimited)");
 
-ABSL_FLAG(std::string, regexp_engines, "",
+RE2_FLAG(re2::String, regexp_engines, "",
           "pattern to select regexp engines to test");
 
 namespace re2 {
@@ -55,9 +49,9 @@ const char* engine_names[kEngineMax] = {
 
 // Returns the name of the engine.
 static const char* EngineName(Engine e) {
-  ABSL_CHECK_GE(e, 0);
-  ABSL_CHECK_LT(e, ABSL_ARRAYSIZE(engine_names));
-  ABSL_CHECK(engine_names[e] != NULL);
+  RE2_CHECK_GE(e, 0);
+  RE2_CHECK_LT(e, RE2_ARRAYSIZE(engine_names));
+  RE2_CHECK(engine_names[e] != NULL);
   return engine_names[e];
 }
 
@@ -69,21 +63,21 @@ static uint32_t Engines() {
   if (did_parse)
     return cached_engines;
 
-  if (absl::GetFlag(FLAGS_regexp_engines).empty()) {
+  if (re2::internal::GetFlag(FLAGS_regexp_engines).empty()) {
     cached_engines = ~0;
   } else {
     for (Engine i = static_cast<Engine>(0); i < kEngineMax; i++)
-      if (absl::GetFlag(FLAGS_regexp_engines).find(EngineName(i)) != std::string::npos)
+      if (re2::internal::GetFlag(FLAGS_regexp_engines).find(EngineName(i)) != re2::String::npos)
         cached_engines |= 1<<i;
   }
 
   if (cached_engines == 0)
-    ABSL_LOG(INFO) << "Warning: no engines enabled.";
+    RE2_LOG(INFO) << "Warning: no engines enabled.";
   if (!UsingPCRE)
     cached_engines &= ~(1<<kEnginePCRE);
   for (Engine i = static_cast<Engine>(0); i < kEngineMax; i++) {
     if (cached_engines & (1<<i))
-      ABSL_LOG(INFO) << EngineName(i) << " enabled";
+      RE2_LOG(INFO) << EngineName(i) << " enabled";
   }
 
   did_parse = true;
@@ -103,7 +97,7 @@ struct TestInstance::Result {
 
   void ClearSubmatch() {
     for (int i = 0; i < kMaxSubmatch; i++)
-      submatch[i] = absl::string_view();
+      submatch[i] = re2::StringView();
   }
 
   bool skipped;         // test skipped: wasn't applicable
@@ -111,24 +105,24 @@ struct TestInstance::Result {
   bool untrusted;       // don't really trust the answer
   bool have_submatch;   // computed all submatch info
   bool have_submatch0;  // computed just submatch[0]
-  absl::string_view submatch[kMaxSubmatch];
+  re2::StringView submatch[kMaxSubmatch];
 };
 
 typedef TestInstance::Result Result;
 
 // Formats a single capture range s in text in the form (a,b)
 // where a and b are the starting and ending offsets of s in text.
-static std::string FormatCapture(absl::string_view text,
-                                 absl::string_view s) {
+static re2::String FormatCapture(re2::StringView text,
+                                 re2::StringView s) {
   if (s.data() == NULL)
     return "(?,?)";
-  return absl::StrFormat("(%d,%d)",
+  return re2::internal::StrFormat("(%d,%d)",
                          BeginPtr(s) - BeginPtr(text),
                          EndPtr(s) - BeginPtr(text));
 }
 
 // Returns whether text contains non-ASCII (>= 0x80) bytes.
-static bool NonASCII(absl::string_view text) {
+static bool NonASCII(re2::StringView text) {
   for (size_t i = 0; i < text.size(); i++)
     if ((uint8_t)text[i] >= 0x80)
       return true;
@@ -136,7 +130,7 @@ static bool NonASCII(absl::string_view text) {
 }
 
 // Returns string representation of match kind.
-static std::string FormatKind(Prog::MatchKind kind) {
+static re2::String FormatKind(Prog::MatchKind kind) {
   switch (kind) {
     case Prog::kFullMatch:
       return "full match";
@@ -151,7 +145,7 @@ static std::string FormatKind(Prog::MatchKind kind) {
 }
 
 // Returns string representation of anchor kind.
-static std::string FormatAnchor(Prog::Anchor anchor) {
+static re2::String FormatAnchor(Prog::Anchor anchor) {
   switch (anchor) {
     case Prog::kAnchored:
       return "anchored";
@@ -163,7 +157,7 @@ static std::string FormatAnchor(Prog::Anchor anchor) {
 
 struct ParseMode {
   Regexp::ParseFlags parse_flags;
-  std::string desc;
+  re2::String desc;
 };
 
 static const Regexp::ParseFlags single_line =
@@ -179,16 +173,16 @@ static ParseMode parse_modes[] = {
   { multi_line|Regexp::Latin1,     "multiline, latin1"    },
 };
 
-static std::string FormatMode(Regexp::ParseFlags flags) {
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(parse_modes); i++)
+static re2::String FormatMode(Regexp::ParseFlags flags) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(parse_modes); i++)
     if (parse_modes[i].parse_flags == flags)
       return parse_modes[i].desc;
-  return absl::StrFormat("%#x", static_cast<uint32_t>(flags));
+  return re2::internal::StrFormat("%#x", static_cast<uint32_t>(flags));
 }
 
 // Constructs and saves all the matching engines that
 // will be required for the given tests.
-TestInstance::TestInstance(absl::string_view regexp_str, Prog::MatchKind kind,
+TestInstance::TestInstance(re2::StringView regexp_str, Prog::MatchKind kind,
                            Regexp::ParseFlags flags)
   : regexp_str_(regexp_str),
     kind_(kind),
@@ -201,14 +195,14 @@ TestInstance::TestInstance(absl::string_view regexp_str, Prog::MatchKind kind,
     re_(NULL),
     re2_(NULL) {
 
-  ABSL_VLOG(1) << absl::CEscape(regexp_str);
+  RE2_VLOG(1) << re2::internal::CEscape(regexp_str);
 
   // Compile regexp to prog.
   // Always required - needed for backtracking (reference implementation).
   RegexpStatus status;
   regexp_ = Regexp::Parse(regexp_str, flags, &status);
   if (regexp_ == NULL) {
-    ABSL_LOG(INFO) << "Cannot parse: " << absl::CEscape(regexp_str_)
+    RE2_LOG(INFO) << "Cannot parse: " << re2::internal::CEscape(regexp_str_)
                    << " mode: " << FormatMode(flags);
     error_ = true;
     return;
@@ -216,14 +210,14 @@ TestInstance::TestInstance(absl::string_view regexp_str, Prog::MatchKind kind,
   num_captures_ = regexp_->NumCaptures();
   prog_ = regexp_->CompileToProg(0);
   if (prog_ == NULL) {
-    ABSL_LOG(INFO) << "Cannot compile: " << absl::CEscape(regexp_str_);
+    RE2_LOG(INFO) << "Cannot compile: " << re2::internal::CEscape(regexp_str_);
     error_ = true;
     return;
   }
-  if (absl::GetFlag(FLAGS_dump_prog)) {
-    ABSL_LOG(INFO) << "Prog for "
+  if (re2::internal::GetFlag(FLAGS_dump_prog)) {
+    RE2_LOG(INFO) << "Prog for "
                    << " regexp "
-                   << absl::CEscape(regexp_str_)
+                   << re2::internal::CEscape(regexp_str_)
                    << " (" << FormatKind(kind_)
                    << ", " << FormatMode(flags_)
                    << ")\n"
@@ -234,17 +228,17 @@ TestInstance::TestInstance(absl::string_view regexp_str, Prog::MatchKind kind,
   if (Engines() & ((1<<kEngineDFA)|(1<<kEngineDFA1))) {
     rprog_ = regexp_->CompileToReverseProg(0);
     if (rprog_ == NULL) {
-      ABSL_LOG(INFO) << "Cannot reverse compile: "
-                     << absl::CEscape(regexp_str_);
+      RE2_LOG(INFO) << "Cannot reverse compile: "
+                     << re2::internal::CEscape(regexp_str_);
       error_ = true;
       return;
     }
-    if (absl::GetFlag(FLAGS_dump_rprog))
-      ABSL_LOG(INFO) << rprog_->Dump();
+    if (re2::internal::GetFlag(FLAGS_dump_rprog))
+      RE2_LOG(INFO) << rprog_->Dump();
   }
 
   // Create re string that will be used for RE and RE2.
-  std::string re = std::string(regexp_str);
+  re2::String re = re2::String(regexp_str);
   // Accomodate flags.
   // Regexp::Latin1 will be accomodated below.
   if (!(flags & Regexp::OneLine))
@@ -263,7 +257,7 @@ TestInstance::TestInstance(absl::string_view regexp_str, Prog::MatchKind kind,
       options.set_longest_match(true);
     re2_ = new RE2(re, options);
     if (!re2_->error().empty()) {
-      ABSL_LOG(INFO) << "Cannot RE2: " << absl::CEscape(re);
+      RE2_LOG(INFO) << "Cannot RE2: " << re2::internal::CEscape(re);
       error_ = true;
       return;
     }
@@ -289,7 +283,7 @@ TestInstance::TestInstance(absl::string_view regexp_str, Prog::MatchKind kind,
     // add one more layer of parens.
     re_ = new PCRE("("+re+")", o);
     if (!re_->error().empty()) {
-      ABSL_LOG(INFO) << "Cannot PCRE: " << absl::CEscape(re);
+      RE2_LOG(INFO) << "Cannot PCRE: " << re2::internal::CEscape(re);
       error_ = true;
       return;
     }
@@ -308,8 +302,8 @@ TestInstance::~TestInstance() {
 // Runs a single search using the named engine type.
 // This interface hides all the irregularities of the various
 // engine interfaces from the rest of this file.
-void TestInstance::RunSearch(Engine type, absl::string_view orig_text,
-                             absl::string_view orig_context,
+void TestInstance::RunSearch(Engine type, re2::StringView orig_text,
+                             re2::StringView orig_context,
                              Prog::Anchor anchor, Result* result) {
   if (regexp_ == NULL) {
     result->skipped = true;
@@ -319,12 +313,12 @@ void TestInstance::RunSearch(Engine type, absl::string_view orig_text,
   if (nsubmatch > kMaxSubmatch)
     nsubmatch = kMaxSubmatch;
 
-  absl::string_view text = orig_text;
-  absl::string_view context = orig_context;
+  re2::StringView text = orig_text;
+  re2::StringView context = orig_context;
 
   switch (type) {
     default:
-      ABSL_LOG(FATAL) << "Bad RunSearch type: " << (int)type;
+      RE2_LOG(FATAL) << "Bad RunSearch type: " << (int)type;
 
     case kEngineBacktrack:
       if (prog_ == NULL) {
@@ -372,9 +366,9 @@ void TestInstance::RunSearch(Engine type, absl::string_view orig_text,
                                Prog::kAnchored, Prog::kLongestMatch,
                                result->submatch,
                                &result->skipped, NULL)) {
-          ABSL_LOG(ERROR) << "Reverse DFA inconsistency: "
-                          << absl::CEscape(regexp_str_)
-                          << " on " << absl::CEscape(text);
+          RE2_LOG(ERROR) << "Reverse DFA inconsistency: "
+                          << re2::internal::CEscape(regexp_str_)
+                          << " on " << re2::internal::CEscape(text);
           result->matched = false;
         }
       }
@@ -443,19 +437,19 @@ void TestInstance::RunSearch(Engine type, absl::string_view orig_text,
       // whitespace, not just vertical tab. Regexp::MimicsPCRE() is
       // unable to handle all cases of this, unfortunately, so just
       // catch them here. :(
-      if (regexp_str_.find("\\v") != absl::string_view::npos &&
-          (text.find('\n') != absl::string_view::npos ||
-           text.find('\f') != absl::string_view::npos ||
-           text.find('\r') != absl::string_view::npos)) {
+      if (regexp_str_.find("\\v") != re2::StringView::npos &&
+          (text.find('\n') != re2::StringView::npos ||
+           text.find('\f') != re2::StringView::npos ||
+           text.find('\r') != re2::StringView::npos)) {
         result->skipped = true;
         break;
       }
 
       // PCRE 8.34 or so started allowing vertical tab to match \s,
       // following a change made in Perl 5.18. RE2 does not.
-      if ((regexp_str_.find("\\s") != absl::string_view::npos ||
-           regexp_str_.find("\\S") != absl::string_view::npos) &&
-          text.find('\v') != absl::string_view::npos) {
+      if ((regexp_str_.find("\\s") != re2::StringView::npos ||
+           regexp_str_.find("\\S") != re2::StringView::npos) &&
+          text.find('\v') != re2::StringView::npos) {
         result->skipped = true;
         break;
       }
@@ -518,7 +512,7 @@ static bool ResultOkay(const Result& r, const Result& correct) {
 }
 
 // Runs a single test.
-bool TestInstance::RunCase(absl::string_view text, absl::string_view context,
+bool TestInstance::RunCase(re2::StringView text, re2::StringView context,
                            Prog::Anchor anchor) {
   // Backtracking is the gold standard.
   Result correct;
@@ -526,12 +520,12 @@ bool TestInstance::RunCase(absl::string_view text, absl::string_view context,
   if (correct.skipped) {
     if (regexp_ == NULL)
       return true;
-    ABSL_LOG(ERROR) << "Skipped backtracking! " << absl::CEscape(regexp_str_)
+    RE2_LOG(ERROR) << "Skipped backtracking! " << re2::internal::CEscape(regexp_str_)
                     << " " << FormatMode(flags_);
     return false;
   }
-  ABSL_VLOG(1) << "Try: regexp " << absl::CEscape(regexp_str_)
-               << " text " << absl::CEscape(text)
+  RE2_VLOG(1) << "Try: regexp " << re2::internal::CEscape(regexp_str_)
+               << " text " << re2::internal::CEscape(text)
                << " (" << FormatKind(kind_)
                << ", " << FormatAnchor(anchor)
                << ", " << FormatMode(flags_)
@@ -546,7 +540,7 @@ bool TestInstance::RunCase(absl::string_view text, absl::string_view context,
     Result r;
     RunSearch(i, text, context, anchor, &r);
     if (ResultOkay(r, correct)) {
-      if (absl::GetFlag(FLAGS_log_okay))
+      if (re2::internal::GetFlag(FLAGS_log_okay))
         LogMatch(r.skipped ? "Skipped: " : "Okay: ", i, text, context, anchor);
       continue;
     }
@@ -566,23 +560,23 @@ bool TestInstance::RunCase(absl::string_view text, absl::string_view context,
              context, anchor);
     if (r.matched != correct.matched) {
       if (r.matched) {
-        ABSL_LOG(INFO) << "   Should not match (but does).";
+        RE2_LOG(INFO) << "   Should not match (but does).";
       } else {
-        ABSL_LOG(INFO) << "   Should match (but does not).";
+        RE2_LOG(INFO) << "   Should match (but does not).";
         continue;
       }
     }
     for (int i = 0; i < 1+num_captures_; i++) {
       if (r.submatch[i].data() != correct.submatch[i].data() ||
           r.submatch[i].size() != correct.submatch[i].size()) {
-        ABSL_LOG(INFO) <<
-          absl::StrFormat("   $%d: should be %s is %s",
+        RE2_LOG(INFO) <<
+          re2::internal::StrFormat("   $%d: should be %s is %s",
                           i,
                           FormatCapture(text, correct.submatch[i]),
                           FormatCapture(text, r.submatch[i]));
       } else {
-        ABSL_LOG(INFO) <<
-          absl::StrFormat("   $%d: %s ok", i,
+        RE2_LOG(INFO) <<
+          re2::internal::StrFormat("   $%d: %s ok", i,
                           FormatCapture(text, r.submatch[i]));
       }
     }
@@ -591,31 +585,31 @@ bool TestInstance::RunCase(absl::string_view text, absl::string_view context,
   if (!all_okay) {
     // This will be initialised once (after flags have been initialised)
     // and that is desirable because we want to enforce a global limit.
-    static int max_regexp_failures = absl::GetFlag(FLAGS_max_regexp_failures);
+    static int max_regexp_failures = re2::internal::GetFlag(FLAGS_max_regexp_failures);
     if (max_regexp_failures > 0 && --max_regexp_failures == 0)
-      ABSL_LOG(QFATAL) << "Too many regexp failures.";
+      RE2_LOG(QFATAL) << "Too many regexp failures.";
   }
 
   return all_okay;
 }
 
 void TestInstance::LogMatch(const char* prefix, Engine e,
-                            absl::string_view text, absl::string_view context,
+                            re2::StringView text, re2::StringView context,
                             Prog::Anchor anchor) {
-  ABSL_LOG(INFO) << prefix
+  RE2_LOG(INFO) << prefix
     << EngineName(e)
     << " regexp "
-    << absl::CEscape(regexp_str_)
+    << re2::internal::CEscape(regexp_str_)
     << " "
-    << absl::CEscape(regexp_->ToString())
+    << re2::internal::CEscape(regexp_->ToString())
     << " text "
-    << absl::CEscape(text)
+    << re2::internal::CEscape(text)
     << " ("
     << BeginPtr(text) - BeginPtr(context)
     << ","
     << EndPtr(text) - BeginPtr(context)
     << ") of context "
-    << absl::CEscape(context)
+    << re2::internal::CEscape(context)
     << " (" << FormatKind(kind_)
     << ", " << FormatAnchor(anchor)
     << ", " << FormatMode(flags_)
@@ -629,10 +623,10 @@ static Prog::MatchKind kinds[] = {
 };
 
 // Test all possible match kinds and parse modes.
-Tester::Tester(absl::string_view regexp) {
+Tester::Tester(re2::StringView regexp) {
   error_ = false;
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(kinds); i++) {
-    for (size_t j = 0; j < ABSL_ARRAYSIZE(parse_modes); j++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(kinds); i++) {
+    for (size_t j = 0; j < RE2_ARRAYSIZE(parse_modes); j++) {
       TestInstance* t = new TestInstance(regexp, kinds[i],
                                          parse_modes[j].parse_flags);
       error_ |= t->error();
@@ -646,7 +640,7 @@ Tester::~Tester() {
     delete v_[i];
 }
 
-bool Tester::TestCase(absl::string_view text, absl::string_view context,
+bool Tester::TestCase(re2::StringView text, re2::StringView context,
                       Prog::Anchor anchor) {
   bool okay = true;
   for (size_t i = 0; i < v_.size(); i++)
@@ -659,10 +653,10 @@ static Prog::Anchor anchors[] = {
   Prog::kUnanchored
 };
 
-bool Tester::TestInput(absl::string_view text) {
+bool Tester::TestInput(re2::StringView text) {
   bool okay = TestInputInContext(text, text);
   if (!text.empty()) {
-    absl::string_view sp;
+    re2::StringView sp;
     sp = text;
     sp.remove_prefix(1);
     okay &= TestInputInContext(sp, text);
@@ -673,16 +667,16 @@ bool Tester::TestInput(absl::string_view text) {
   return okay;
 }
 
-bool Tester::TestInputInContext(absl::string_view text,
-                                absl::string_view context) {
+bool Tester::TestInputInContext(re2::StringView text,
+                                re2::StringView context) {
   bool okay = true;
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(anchors); i++)
+  for (size_t i = 0; i < RE2_ARRAYSIZE(anchors); i++)
     okay &= TestCase(text, context, anchors[i]);
   return okay;
 }
 
-bool TestRegexpOnText(absl::string_view regexp,
-                      absl::string_view text) {
+bool TestRegexpOnText(re2::StringView regexp,
+                      re2::StringView text) {
   Tester t(regexp);
   return t.TestInput(text);
 }

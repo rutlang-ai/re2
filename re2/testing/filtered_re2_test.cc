@@ -11,8 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "absl/base/macros.h"
-#include "absl/log/absl_log.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/re2.h"
 
@@ -22,9 +21,9 @@ struct FilterTestVars {
   FilterTestVars() {}
   explicit FilterTestVars(int min_atom_len) : f(min_atom_len) {}
 
-  std::vector<std::string> atoms;
-  std::vector<int> atom_indices;
-  std::vector<int> matches;
+  re2::Vector<re2::String> atoms;
+  re2::Vector<int> atom_indices;
+  re2::Vector<int> matches;
   RE2::Options opts;
   FilteredRE2 f;
 };
@@ -161,7 +160,7 @@ bool CheckExpectedAtoms(const char* atoms[],
                         size_t n,
                         const char* testname,
                         struct FilterTestVars* v) {
-  std::vector<std::string> expected;
+  re2::Vector<re2::String> expected;
   for (size_t i = 0; i < n; i++)
     expected.push_back(atoms[i]);
 
@@ -173,13 +172,13 @@ bool CheckExpectedAtoms(const char* atoms[],
       pass = pass && expected[i] == v->atoms[i];
 
   if (!pass) {
-    ABSL_LOG(ERROR) << "Failed " << testname;
-    ABSL_LOG(ERROR) << "Expected #atoms = " << expected.size();
+    RE2_LOG(ERROR) << "Failed " << testname;
+    RE2_LOG(ERROR) << "Expected #atoms = " << expected.size();
     for (size_t i = 0; i < expected.size(); i++)
-      ABSL_LOG(ERROR) << expected[i];
-    ABSL_LOG(ERROR) << "Found #atoms = " << v->atoms.size();
+      RE2_LOG(ERROR) << expected[i];
+    RE2_LOG(ERROR) << "Found #atoms = " << v->atoms.size();
     for (size_t i = 0; i < v->atoms.size(); i++)
-      ABSL_LOG(ERROR) << v->atoms[i];
+      RE2_LOG(ERROR) << v->atoms[i];
   }
 
   return pass;
@@ -187,14 +186,14 @@ bool CheckExpectedAtoms(const char* atoms[],
 
 TEST(FilteredRE2Test, AtomTests) {
   int nfail = 0;
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(atom_tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(atom_tests); i++) {
     FilterTestVars v;
     AtomTest* t = &atom_tests[i];
     size_t nregexp, natom;
-    for (nregexp = 0; nregexp < ABSL_ARRAYSIZE(t->regexps); nregexp++)
+    for (nregexp = 0; nregexp < RE2_ARRAYSIZE(t->regexps); nregexp++)
       if (t->regexps[nregexp] == NULL)
         break;
-    for (natom = 0; natom < ABSL_ARRAYSIZE(t->atoms); natom++)
+    for (natom = 0; natom < RE2_ARRAYSIZE(t->atoms); natom++)
       if (t->atoms[natom] == NULL)
         break;
     AddRegexpsAndCompile(t->regexps, nregexp, &v);
@@ -204,9 +203,9 @@ TEST(FilteredRE2Test, AtomTests) {
   EXPECT_EQ(0, nfail);
 }
 
-void FindAtomIndices(const std::vector<std::string>& atoms,
-                     const std::vector<std::string>& matched_atoms,
-                     std::vector<int>* atom_indices) {
+void FindAtomIndices(const re2::Vector<re2::String>& atoms,
+                     const re2::Vector<re2::String>& matched_atoms,
+                     re2::Vector<int>* atom_indices) {
   atom_indices->clear();
   for (size_t i = 0; i < matched_atoms.size(); i++) {
     for (size_t j = 0; j < atoms.size(); j++) {
@@ -224,15 +223,15 @@ TEST(FilteredRE2Test, MatchEmptyPattern) {
   // We are using the regexps used in one of the atom tests
   // for this test. Adding the EXPECT here to make sure
   // the index we use for the test is for the correct test.
-  EXPECT_EQ("CheckEmptyPattern", std::string(t->testname));
+  EXPECT_EQ("CheckEmptyPattern", re2::String(t->testname));
   size_t nregexp;
-  for (nregexp = 0; nregexp < ABSL_ARRAYSIZE(t->regexps); nregexp++)
+  for (nregexp = 0; nregexp < RE2_ARRAYSIZE(t->regexps); nregexp++)
     if (t->regexps[nregexp] == NULL)
       break;
   AddRegexpsAndCompile(t->regexps, nregexp, &v);
-  std::string text = "0123";
-  std::vector<int> atom_ids;
-  std::vector<int> matching_regexps;
+  re2::String text = "0123";
+  re2::Vector<int> atom_ids;
+  re2::Vector<int> matching_regexps;
   EXPECT_EQ(0, v.f.FirstMatch(text, atom_ids));
 }
 
@@ -241,20 +240,20 @@ TEST(FilteredRE2Test, MatchTests) {
   AtomTest* t = &atom_tests[2];
   // We are using the regexps used in one of the atom tests
   // for this test.
-  EXPECT_EQ("SubstrAtomRemovesSuperStrInOr", std::string(t->testname));
+  EXPECT_EQ("SubstrAtomRemovesSuperStrInOr", re2::String(t->testname));
   size_t nregexp;
-  for (nregexp = 0; nregexp < ABSL_ARRAYSIZE(t->regexps); nregexp++)
+  for (nregexp = 0; nregexp < RE2_ARRAYSIZE(t->regexps); nregexp++)
     if (t->regexps[nregexp] == NULL)
       break;
   AddRegexpsAndCompile(t->regexps, nregexp, &v);
 
-  std::string text = "abc121212xyz";
+  re2::String text = "abc121212xyz";
   // atoms = abc
-  std::vector<int> atom_ids;
-  std::vector<std::string> atoms;
+  re2::Vector<int> atom_ids;
+  re2::Vector<re2::String> atoms;
   atoms.push_back("abc");
   FindAtomIndices(v.atoms, atoms, &atom_ids);
-  std::vector<int> matching_regexps;
+  re2::Vector<int> matching_regexps;
   v.f.AllMatches(text, atom_ids, &matching_regexps);
   EXPECT_EQ(size_t{1}, matching_regexps.size());
 
@@ -274,9 +273,9 @@ TEST(FilteredRE2Test, MatchTests) {
   atoms.push_back("yyy");
   atoms.push_back("yyyzzz");
   FindAtomIndices(v.atoms, atoms, &atom_ids);
-  ABSL_LOG(INFO) << "S: " << atom_ids.size();
+  RE2_LOG(INFO) << "S: " << atom_ids.size();
   for (size_t i = 0; i < atom_ids.size(); i++)
-    ABSL_LOG(INFO) << "i: " << i << " : " << atom_ids[i];
+    RE2_LOG(INFO) << "i: " << i << " : " << atom_ids[i];
   v.f.AllMatches(text, atom_ids, &matching_regexps);
   EXPECT_EQ(size_t{2}, matching_regexps.size());
 }
@@ -290,8 +289,8 @@ TEST(FilteredRE2Test, EmptyStringInStringSetBug) {
   FilterTestVars v(0);  // override the minimum atom length
   const char* regexps[] = {"-R.+(|ADD=;AA){12}}"};
   const char* atoms[] = {"", "-r", "add=;aa", "}"};
-  AddRegexpsAndCompile(regexps, ABSL_ARRAYSIZE(regexps), &v);
-  EXPECT_TRUE(CheckExpectedAtoms(atoms, ABSL_ARRAYSIZE(atoms),
+  AddRegexpsAndCompile(regexps, RE2_ARRAYSIZE(regexps), &v);
+  EXPECT_TRUE(CheckExpectedAtoms(atoms, RE2_ARRAYSIZE(atoms),
                                  "EmptyStringInStringSetBug", &v));
 }
 

@@ -39,10 +39,10 @@
 // supplied pattern exactly.
 //
 // Example: successful match
-//    ABSL_CHECK(PCRE::FullMatch("hello", "h.*o"));
+//    RE2_CHECK(PCRE::FullMatch("hello", "h.*o"));
 //
 // Example: unsuccessful match (requires full match):
-//    ABSL_CHECK(!PCRE::FullMatch("hello", "e"));
+//    RE2_CHECK(!PCRE::FullMatch("hello", "e"));
 //
 // -----------------------------------------------------------------------
 // UTF-8 AND THE MATCHING INTERFACE:
@@ -58,7 +58,7 @@
 //
 // Example:
 //    PCRE re(utf8_pattern, PCRE::UTF8);
-//    ABSL_CHECK(PCRE::FullMatch(utf8_string, re));
+//    RE2_CHECK(PCRE::FullMatch(utf8_string, re));
 //
 // -----------------------------------------------------------------------
 // MATCHING WITH SUBSTRING EXTRACTION:
@@ -67,23 +67,23 @@
 //
 // Example: extracts "ruby" into "s" and 1234 into "i"
 //    int i;
-//    std::string s;
-//    ABSL_CHECK(PCRE::FullMatch("ruby:1234", "(\\w+):(\\d+)", &s, &i));
+//    re2::String s;
+//    RE2_CHECK(PCRE::FullMatch("ruby:1234", "(\\w+):(\\d+)", &s, &i));
 //
 // Example: fails because string cannot be stored in integer
-//    ABSL_CHECK(!PCRE::FullMatch("ruby", "(.*)", &i));
+//    RE2_CHECK(!PCRE::FullMatch("ruby", "(.*)", &i));
 //
 // Example: fails because there aren't enough sub-patterns:
-//    ABSL_CHECK(!PCRE::FullMatch("ruby:1234", "\\w+:\\d+", &s));
+//    RE2_CHECK(!PCRE::FullMatch("ruby:1234", "\\w+:\\d+", &s));
 //
 // Example: does not try to extract any extra sub-patterns
-//    ABSL_CHECK(PCRE::FullMatch("ruby:1234", "(\\w+):(\\d+)", &s));
+//    RE2_CHECK(PCRE::FullMatch("ruby:1234", "(\\w+):(\\d+)", &s));
 //
 // Example: does not try to extract into NULL
-//    ABSL_CHECK(PCRE::FullMatch("ruby:1234", "(\\w+):(\\d+)", NULL, &i));
+//    RE2_CHECK(PCRE::FullMatch("ruby:1234", "(\\w+):(\\d+)", NULL, &i));
 //
 // Example: integer overflow causes failure
-//    ABSL_CHECK(!PCRE::FullMatch("ruby:1234567891234", "\\w+:(\\d+)", &i));
+//    RE2_CHECK(!PCRE::FullMatch("ruby:1234567891234", "\\w+:(\\d+)", &i));
 //
 // -----------------------------------------------------------------------
 // PARTIAL MATCHES
@@ -92,12 +92,12 @@
 // to match any substring of the text.
 //
 // Example: simple search for a string:
-//      ABSL_CHECK(PCRE::PartialMatch("hello", "ell"));
+//      RE2_CHECK(PCRE::PartialMatch("hello", "ell"));
 //
 // Example: find first number in a string
 //      int number;
-//      ABSL_CHECK(PCRE::PartialMatch("x*100 + 20", "(\\d+)", &number));
-//      ABSL_CHECK_EQ(number, 100);
+//      RE2_CHECK(PCRE::PartialMatch("x*100 + 20", "(\\d+)", &number));
+//      RE2_CHECK_EQ(number, 100);
 //
 // -----------------------------------------------------------------------
 // PPCRE-COMPILED PCREGULAR EXPPCRESSIONS
@@ -124,10 +124,10 @@
 // which represents a sub-range of a real string.
 //
 // Example: read lines of the form "var = value" from a string.
-//      std::string contents = ...;         // Fill string somehow
-//      absl::string_view input(contents);  // Wrap a string_view around it
+//      re2::String contents = ...;         // Fill string somehow
+//      re2::StringView input(contents);  // Wrap a string_view around it
 //
-//      std::string var;
+//      re2::String var;
 //      int value;
 //      while (PCRE::Consume(&input, "(\\w+) = (\\d+)\n", &var, &value)) {
 //        ...;
@@ -157,11 +157,11 @@
 //
 // Example:
 //   int a, b, c, d;
-//   ABSL_CHECK(PCRE::FullMatch("100 40 0100 0x40", "(.*) (.*) (.*) (.*)",
+//   RE2_CHECK(PCRE::FullMatch("100 40 0100 0x40", "(.*) (.*) (.*) (.*)",
 //         Octal(&a), Hex(&b), CRadix(&c), CRadix(&d));
 // will leave 64 in a, b, c, and d.
 
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 
 #ifdef USEPCRE
 #include <pcre.h>
@@ -221,21 +221,21 @@ class PCRE {
   // pass in a string or a "const char*" wherever an "PCRE" is expected.
   PCRE(const char* pattern);
   PCRE(const char* pattern, Option option);
-  PCRE(const std::string& pattern);
-  PCRE(const std::string& pattern, Option option);
+  PCRE(const re2::String& pattern);
+  PCRE(const re2::String& pattern, Option option);
   PCRE(const char *pattern, const PCRE_Options& re_option);
-  PCRE(const std::string& pattern, const PCRE_Options& re_option);
+  PCRE(const re2::String& pattern, const PCRE_Options& re_option);
 
   ~PCRE();
 
   // The string specification for this PCRE.  E.g.
   //   PCRE re("ab*c?d+");
   //   re.pattern();    // "ab*c?d+"
-  const std::string& pattern() const { return pattern_; }
+  const re2::String& pattern() const { return pattern_; }
 
   // If PCRE could not be created properly, returns an error string.
   // Else returns the empty string.
-  const std::string& error() const { return *error_; }
+  const re2::String& error() const { return *error_; }
 
   // Whether the PCRE has hit a match limit during execution.
   // Not thread safe.  Intended only for testing.
@@ -250,13 +250,13 @@ class PCRE {
   // Matches "text" against "pattern".  If pointer arguments are
   // supplied, copies matched sub-patterns into them.
   //
-  // You can pass in a "const char*" or a "std::string" for "text".
-  // You can pass in a "const char*" or a "std::string" or a "PCRE" for "pattern".
+  // You can pass in a "const char*" or a "re2::String" for "text".
+  // You can pass in a "const char*" or a "re2::String" or a "PCRE" for "pattern".
   //
   // The provided pointer arguments can be pointers to any scalar numeric
   // type, or one of:
-  //    std::string        (matched piece is copied to string)
-  //    absl::string_view  (string_view is mutated to point to matched piece)
+  //    re2::String        (matched piece is copied to string)
+  //    re2::StringView  (string_view is mutated to point to matched piece)
   //    T                  ("bool T::ParseFrom(const char*, size_t)" must exist)
   //    (void*)NULL        (the corresponding matched sub-pattern is not copied)
   //
@@ -276,7 +276,7 @@ class PCRE {
   //    int number;
   //    PCRE::FullMatch("abc", "[a-z]+(\\d+)?", &number);
   struct FullMatchFunctor {
-    bool operator ()(absl::string_view text, const PCRE& re,  // 3..16 args
+    bool operator ()(re2::StringView text, const PCRE& re,  // 3..16 args
                      const Arg& ptr1 = no_more_args,
                      const Arg& ptr2 = no_more_args,
                      const Arg& ptr3 = no_more_args,
@@ -300,7 +300,7 @@ class PCRE {
   // Exactly like FullMatch(), except that "pattern" is allowed to match
   // a substring of "text".
   struct PartialMatchFunctor {
-    bool operator ()(absl::string_view text, const PCRE& re,  // 3..16 args
+    bool operator ()(re2::StringView text, const PCRE& re,  // 3..16 args
                      const Arg& ptr1 = no_more_args,
                      const Arg& ptr2 = no_more_args,
                      const Arg& ptr3 = no_more_args,
@@ -325,7 +325,7 @@ class PCRE {
   // match a prefix of "text", and "input" is advanced past the matched
   // text.  Note: "input" is modified iff this routine returns true.
   struct ConsumeFunctor {
-    bool operator ()(absl::string_view* input, const PCRE& pattern,  // 3..16 args
+    bool operator ()(re2::StringView* input, const PCRE& pattern,  // 3..16 args
                      const Arg& ptr1 = no_more_args,
                      const Arg& ptr2 = no_more_args,
                      const Arg& ptr3 = no_more_args,
@@ -351,7 +351,7 @@ class PCRE {
   // "input".  For example, "FindAndConsume(s, "(\\w+)", &word)" finds the next
   // word in "s" and stores it in "word".
   struct FindAndConsumeFunctor {
-    bool operator ()(absl::string_view* input, const PCRE& pattern,  // 3..16 args
+    bool operator ()(re2::StringView* input, const PCRE& pattern,  // 3..16 args
                      const Arg& ptr1 = no_more_args,
                      const Arg& ptr2 = no_more_args,
                      const Arg& ptr3 = no_more_args,
@@ -378,28 +378,28 @@ class PCRE {
   // from the pattern.  \0 in "rewrite" refers to the entire matching
   // text.  E.g.,
   //
-  //   std::string s = "yabba dabba doo";
-  //   ABSL_CHECK(PCRE::Replace(&s, "b+", "d"));
+  //   re2::String s = "yabba dabba doo";
+  //   RE2_CHECK(PCRE::Replace(&s, "b+", "d"));
   //
   // will leave "s" containing "yada dabba doo"
   //
   // Returns true if the pattern matches and a replacement occurs,
   // false otherwise.
-  static bool Replace(std::string* str, const PCRE& pattern,
-                      absl::string_view rewrite);
+  static bool Replace(re2::String* str, const PCRE& pattern,
+                      re2::StringView rewrite);
 
   // Like Replace(), except replaces all occurrences of the pattern in
   // the string with the rewrite.  Replacements are not subject to
   // re-matching.  E.g.,
   //
-  //   std::string s = "yabba dabba doo";
-  //   ABSL_CHECK(PCRE::GlobalReplace(&s, "b+", "d"));
+  //   re2::String s = "yabba dabba doo";
+  //   RE2_CHECK(PCRE::GlobalReplace(&s, "b+", "d"));
   //
   // will leave "s" containing "yada dada doo"
   //
   // Returns the number of replacements made.
-  static int GlobalReplace(std::string* str, const PCRE& pattern,
-                           absl::string_view rewrite);
+  static int GlobalReplace(re2::String* str, const PCRE& pattern,
+                           re2::StringView rewrite);
 
   // Like Replace, except that if the pattern matches, "rewrite"
   // is copied into "out" with substitutions.  The non-matching
@@ -407,8 +407,8 @@ class PCRE {
   //
   // Returns true iff a match occurred and the extraction happened
   // successfully;  if no match occurs, the string is left unaffected.
-  static bool Extract(absl::string_view text, const PCRE& pattern,
-                      absl::string_view rewrite, std::string* out);
+  static bool Extract(re2::StringView text, const PCRE& pattern,
+                      re2::StringView rewrite, re2::String* out);
 
   // Check that the given @p rewrite string is suitable for use with
   // this PCRE.  It checks that:
@@ -417,13 +417,13 @@ class PCRE {
   //   * The @p rewrite string doesn't have any syntax errors
   //       ('\' followed by anything besides [0-9] and '\').
   // Making this test will guarantee that "replace" and "extract"
-  // operations won't ABSL_LOG(ERROR) or fail because of a bad rewrite
+  // operations won't RE2_LOG(ERROR) or fail because of a bad rewrite
   // string.
   // @param rewrite The proposed rewrite string.
   // @param error An error message is recorded here, iff we return false.
   //              Otherwise, it is unchanged.
   // @return true, iff @p rewrite is suitable for use with the PCRE.
-  bool CheckRewriteString(absl::string_view rewrite, std::string* error) const;
+  bool CheckRewriteString(re2::StringView rewrite, re2::String* error) const;
 
   // Returns a copy of 'unquoted' with all potentially meaningful
   // regexp characters backslash-escaped.  The returned string, used
@@ -432,7 +432,7 @@ class PCRE {
   //           1.5-2.0?
   //  becomes:
   //           1\.5\-2\.0\?
-  static std::string QuoteMeta(absl::string_view unquoted);
+  static re2::String QuoteMeta(re2::StringView unquoted);
 
   /***** Generic matching interface (not so nice to use) *****/
 
@@ -445,7 +445,7 @@ class PCRE {
 
   // General matching routine.  Stores the length of the match in
   // "*consumed" if successful.
-  bool DoMatch(absl::string_view text, Anchor anchor, size_t* consumed,
+  bool DoMatch(re2::StringView text, Anchor anchor, size_t* consumed,
                const Arg* const* args, int n) const;
 
   // Return the number of capturing subpatterns, or -1 if the
@@ -467,26 +467,26 @@ class PCRE {
   // against "foo", "bar", and "baz" respectively.
   // When matching PCRE("(foo)|hello") against "hello", it will return 1.
   // But the values for all subpattern are filled in into "vec".
-  int TryMatch(absl::string_view text, size_t startpos, Anchor anchor,
+  int TryMatch(re2::StringView text, size_t startpos, Anchor anchor,
                bool empty_ok, int* vec, int vecsize) const;
 
   // Append the "rewrite" string, with backslash substitutions from "text"
   // and "vec", to string "out".
-  bool Rewrite(std::string* out, absl::string_view rewrite,
-               absl::string_view text, int* vec, int veclen) const;
+  bool Rewrite(re2::String* out, re2::StringView rewrite,
+               re2::StringView text, int* vec, int veclen) const;
 
   // internal implementation for DoMatch
-  bool DoMatchImpl(absl::string_view text, Anchor anchor, size_t* consumed,
+  bool DoMatchImpl(re2::StringView text, Anchor anchor, size_t* consumed,
                    const Arg* const args[], int n, int* vec, int vecsize) const;
 
   // Compile the regexp for the specified anchoring mode
   pcre* Compile(Anchor anchor);
 
-  std::string         pattern_;
+  re2::String         pattern_;
   Option              options_;
   pcre*               re_full_;        // For full matches
   pcre*               re_partial_;     // For partial matches
-  const std::string*  error_;          // Error indicator (or empty string)
+  const re2::String*  error_;          // Error indicator (or empty string)
   bool                report_errors_;  // Silences error logging if false
   int                 match_limit_;    // Limit on execution resources
   int                 stack_limit_;    // Limit on stack resources (bytes)
@@ -575,8 +575,8 @@ class PCRE::Arg {
   MAKE_PARSER(unsigned char,      parse_uchar);
   MAKE_PARSER(float,              parse_float);
   MAKE_PARSER(double,             parse_double);
-  MAKE_PARSER(std::string,        parse_string);
-  MAKE_PARSER(absl::string_view,  parse_string_view);
+  MAKE_PARSER(re2::String,        parse_string);
+  MAKE_PARSER(re2::StringView,  parse_string_view);
 
   MAKE_PARSER(short,              parse_short);
   MAKE_PARSER(unsigned short,     parse_ushort);

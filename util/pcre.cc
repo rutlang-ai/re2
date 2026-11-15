@@ -12,13 +12,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits>
-#include <string>
 #include <utility>
 
-#include "absl/flags/flag.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/str_format.h"
+#include "re2/testing/support.h"
 #include "util/pcre.h"
 
 // Silence warnings about the wacky formatting in the operator() functions.
@@ -26,16 +22,16 @@
 #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #endif
 
-#define PCREPORT(level) ABSL_LOG(level)
+#define PCREPORT(level) RE2_LOG(level)
 
 // Default PCRE limits.
 // Defaults chosen to allow a plausible amount of CPU and
 // not exceed main thread stacks.  Note that other threads
 // often have smaller stacks, and therefore tightening
 // regexp_stack_limit may frequently be necessary.
-ABSL_FLAG(int, regexp_stack_limit, 256 << 10,
+RE2_FLAG(int, regexp_stack_limit, 256 << 10,
           "default PCRE stack limit (bytes)");
-ABSL_FLAG(int, regexp_match_limit, 1000000,
+RE2_FLAG(int, regexp_match_limit, 1000000,
           "default PCRE match limit (function calls)");
 
 #ifndef USEPCRE
@@ -98,7 +94,7 @@ const PCRE::ConsumeFunctor PCRE::Consume = { };
 const PCRE::FindAndConsumeFunctor PCRE::FindAndConsume = { };
 
 // If a regular expression has no error, its error_ field points here
-static const std::string empty_string;
+static const re2::String empty_string;
 
 void PCRE::Init(const char* pattern, Option options, int match_limit,
               int stack_limit, bool report_errors) {
@@ -113,7 +109,7 @@ void PCRE::Init(const char* pattern, Option options, int match_limit,
   re_partial_ = NULL;
 
   if (options & ~(EnabledCompileOptions | EnabledExecOptions)) {
-    error_ = new std::string("illegal regexp option");
+    error_ = new re2::String("illegal regexp option");
     PCREPORT(ERROR)
         << "Error compiling '" << pattern << "': illegal regexp option";
   } else {
@@ -130,13 +126,13 @@ PCRE::PCRE(const char* pattern) {
 PCRE::PCRE(const char* pattern, Option option) {
   Init(pattern, option, 0, 0, true);
 }
-PCRE::PCRE(const std::string& pattern) {
+PCRE::PCRE(const re2::String& pattern) {
   Init(pattern.c_str(), None, 0, 0, true);
 }
-PCRE::PCRE(const std::string& pattern, Option option) {
+PCRE::PCRE(const re2::String& pattern, Option option) {
   Init(pattern.c_str(), option, 0, 0, true);
 }
-PCRE::PCRE(const std::string& pattern, const PCRE_Options& re_option) {
+PCRE::PCRE(const re2::String& pattern, const PCRE_Options& re_option) {
   Init(pattern.c_str(), re_option.option(), re_option.match_limit(),
        re_option.stack_limit(), re_option.report_errors());
 }
@@ -175,7 +171,7 @@ pcre* PCRE::Compile(Anchor anchor) {
   } else {
     // Tack a '\z' at the end of PCRE.  Parenthesize it first so that
     // the '\z' applies to all top-level alternatives in the regexp.
-    std::string wrapped = "(?:";  // A non-counting grouping operator
+    re2::String wrapped = "(?:";  // A non-counting grouping operator
     wrapped += pattern_;
     wrapped += ")\\z";
     re = pcre_compile(wrapped.c_str(),
@@ -183,7 +179,7 @@ pcre* PCRE::Compile(Anchor anchor) {
                       &error, &eoffset, NULL);
   }
   if (re == NULL) {
-    if (error_ == &empty_string) error_ = new std::string(error);
+    if (error_ == &empty_string) error_ = new re2::String(error);
     PCREPORT(ERROR) << "Error compiling '" << pattern_ << "': " << error;
   }
   return re;
@@ -192,7 +188,7 @@ pcre* PCRE::Compile(Anchor anchor) {
 /***** Convenience interfaces *****/
 
 bool PCRE::FullMatchFunctor::operator()(
-    absl::string_view text, const PCRE& re, const Arg& a0, const Arg& a1,
+    re2::StringView text, const PCRE& re, const Arg& a0, const Arg& a1,
     const Arg& a2, const Arg& a3, const Arg& a4, const Arg& a5, const Arg& a6,
     const Arg& a7, const Arg& a8, const Arg& a9, const Arg& a10, const Arg& a11,
     const Arg& a12, const Arg& a13, const Arg& a14, const Arg& a15) const {
@@ -222,7 +218,7 @@ done:
 }
 
 bool PCRE::PartialMatchFunctor::operator()(
-    absl::string_view text, const PCRE& re, const Arg& a0, const Arg& a1,
+    re2::StringView text, const PCRE& re, const Arg& a0, const Arg& a1,
     const Arg& a2, const Arg& a3, const Arg& a4, const Arg& a5, const Arg& a6,
     const Arg& a7, const Arg& a8, const Arg& a9, const Arg& a10, const Arg& a11,
     const Arg& a12, const Arg& a13, const Arg& a14, const Arg& a15) const {
@@ -252,7 +248,7 @@ done:
 }
 
 bool PCRE::ConsumeFunctor::operator()(
-    absl::string_view* input, const PCRE& pattern, const Arg& a0, const Arg& a1,
+    re2::StringView* input, const PCRE& pattern, const Arg& a0, const Arg& a1,
     const Arg& a2, const Arg& a3, const Arg& a4, const Arg& a5, const Arg& a6,
     const Arg& a7, const Arg& a8, const Arg& a9, const Arg& a10, const Arg& a11,
     const Arg& a12, const Arg& a13, const Arg& a14, const Arg& a15) const {
@@ -288,7 +284,7 @@ done:
 }
 
 bool PCRE::FindAndConsumeFunctor::operator()(
-    absl::string_view* input, const PCRE& pattern, const Arg& a0, const Arg& a1,
+    re2::StringView* input, const PCRE& pattern, const Arg& a0, const Arg& a1,
     const Arg& a2, const Arg& a3, const Arg& a4, const Arg& a5, const Arg& a6,
     const Arg& a7, const Arg& a8, const Arg& a9, const Arg& a10, const Arg& a11,
     const Arg& a12, const Arg& a13, const Arg& a14, const Arg& a15) const {
@@ -323,14 +319,14 @@ done:
   }
 }
 
-bool PCRE::Replace(std::string* str, const PCRE& pattern,
-                   absl::string_view rewrite) {
+bool PCRE::Replace(re2::String* str, const PCRE& pattern,
+                   re2::StringView rewrite) {
   int vec[kVecSize] = {};
   int matches = pattern.TryMatch(*str, 0, UNANCHORED, true, vec, kVecSize);
   if (matches == 0)
     return false;
 
-  std::string s;
+  re2::String s;
   if (!pattern.Rewrite(&s, rewrite, *str, vec, matches))
     return false;
 
@@ -340,11 +336,11 @@ bool PCRE::Replace(std::string* str, const PCRE& pattern,
   return true;
 }
 
-int PCRE::GlobalReplace(std::string* str, const PCRE& pattern,
-                        absl::string_view rewrite) {
+int PCRE::GlobalReplace(re2::String* str, const PCRE& pattern,
+                        re2::StringView rewrite) {
   int count = 0;
   int vec[kVecSize] = {};
-  std::string out;
+  re2::String out;
   size_t start = 0;
   bool last_match_was_empty_string = false;
 
@@ -397,8 +393,8 @@ int PCRE::GlobalReplace(std::string* str, const PCRE& pattern,
   return count;
 }
 
-bool PCRE::Extract(absl::string_view text, const PCRE& pattern,
-                   absl::string_view rewrite, std::string* out) {
+bool PCRE::Extract(re2::StringView text, const PCRE& pattern,
+                   re2::StringView rewrite, re2::String* out) {
   int vec[kVecSize] = {};
   int matches = pattern.TryMatch(text, 0, UNANCHORED, true, vec, kVecSize);
   if (matches == 0)
@@ -407,8 +403,8 @@ bool PCRE::Extract(absl::string_view text, const PCRE& pattern,
   return pattern.Rewrite(out, rewrite, text, vec, matches);
 }
 
-std::string PCRE::QuoteMeta(absl::string_view unquoted) {
-  std::string result;
+re2::String PCRE::QuoteMeta(re2::StringView unquoted) {
+  re2::String result;
   result.reserve(unquoted.size() << 1);
 
   // Escape any ascii character not in [A-Za-z_0-9].
@@ -452,7 +448,7 @@ void PCRE::ClearHitLimit() {
   hit_limit_ = 0;
 }
 
-int PCRE::TryMatch(absl::string_view text, size_t startpos, Anchor anchor,
+int PCRE::TryMatch(re2::StringView text, size_t startpos, Anchor anchor,
                    bool empty_ok, int* vec, int vecsize) const {
   pcre* re = (anchor == ANCHOR_BOTH) ? re_full_ : re_partial_;
   if (re == NULL) {
@@ -462,12 +458,12 @@ int PCRE::TryMatch(absl::string_view text, size_t startpos, Anchor anchor,
 
   int match_limit = match_limit_;
   if (match_limit <= 0) {
-    match_limit = absl::GetFlag(FLAGS_regexp_match_limit);
+    match_limit = re2::internal::GetFlag(FLAGS_regexp_match_limit);
   }
 
   int stack_limit = stack_limit_;
   if (stack_limit <= 0) {
-    stack_limit = absl::GetFlag(FLAGS_regexp_stack_limit);
+    stack_limit = re2::internal::GetFlag(FLAGS_regexp_stack_limit);
   }
 
   pcre_extra extra = { 0 };
@@ -544,7 +540,7 @@ int PCRE::TryMatch(absl::string_view text, size_t startpos, Anchor anchor,
   return rc;
 }
 
-bool PCRE::DoMatchImpl(absl::string_view text, Anchor anchor, size_t* consumed,
+bool PCRE::DoMatchImpl(re2::StringView text, Anchor anchor, size_t* consumed,
                        const Arg* const* args, int n, int* vec,
                        int vecsize) const {
   assert((1 + n) * 3 <= vecsize);  // results + PCRE workspace
@@ -590,7 +586,7 @@ bool PCRE::DoMatchImpl(absl::string_view text, Anchor anchor, size_t* consumed,
   return true;
 }
 
-bool PCRE::DoMatch(absl::string_view text, Anchor anchor, size_t* consumed,
+bool PCRE::DoMatch(re2::StringView text, Anchor anchor, size_t* consumed,
                    const Arg* const args[], int n) const {
   assert(n >= 0);
   const int vecsize = (1 + n) * 3;  // results + PCRE workspace
@@ -601,8 +597,8 @@ bool PCRE::DoMatch(absl::string_view text, Anchor anchor, size_t* consumed,
   return b;
 }
 
-bool PCRE::Rewrite(std::string* out, absl::string_view rewrite,
-                   absl::string_view text, int* vec, int veclen) const {
+bool PCRE::Rewrite(re2::String* out, re2::StringView rewrite,
+                   re2::StringView text, int* vec, int veclen) const {
   int number_of_capturing_groups = NumberOfCapturingGroups();
   for (const char *s = rewrite.data(), *end = s + rewrite.size();
        s < end; s++) {
@@ -637,8 +633,8 @@ bool PCRE::Rewrite(std::string* out, absl::string_view rewrite,
   return true;
 }
 
-bool PCRE::CheckRewriteString(absl::string_view rewrite,
-                              std::string* error) const {
+bool PCRE::CheckRewriteString(re2::StringView rewrite,
+                              re2::String* error) const {
   int max_token = -1;
   for (const char *s = rewrite.data(), *end = s + rewrite.size();
        s < end; s++) {
@@ -666,7 +662,7 @@ bool PCRE::CheckRewriteString(absl::string_view rewrite,
   }
 
   if (max_token > NumberOfCapturingGroups()) {
-    *error = absl::StrFormat(
+    *error = re2::internal::StrFormat(
         "Rewrite schema requests %d matches, but the regexp only has %d "
         "parenthesized subexpressions.",
         max_token, NumberOfCapturingGroups());
@@ -702,13 +698,13 @@ bool PCRE::Arg::parse_null(const char* str, size_t n, void* dest) {
 
 bool PCRE::Arg::parse_string(const char* str, size_t n, void* dest) {
   if (dest == NULL) return true;
-  reinterpret_cast<std::string*>(dest)->assign(str, n);
+  reinterpret_cast<re2::String*>(dest)->assign(str, n);
   return true;
 }
 
 bool PCRE::Arg::parse_string_view(const char* str, size_t n, void* dest) {
   if (dest == NULL) return true;
-  *(reinterpret_cast<absl::string_view*>(dest)) = absl::string_view(str, n);
+  *(reinterpret_cast<re2::StringView*>(dest)) = re2::StringView(str, n);
   return true;
 }
 

@@ -6,8 +6,7 @@
 
 #include <stdio.h>
 
-#include "absl/base/macros.h"
-#include "absl/strings/str_format.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/regexp.h"
 #include "util/utf.h"
@@ -90,25 +89,25 @@ static CCTest tests[] = {
 template <typename CharClass>
 static void Broke(const char *desc, const CCTest* t, CharClass* cc) {
   if (t == NULL) {
-    absl::PrintF("\t%s:", desc);
+    re2::internal::PrintF("\t%s:", desc);
   } else {
-    absl::PrintF("\n");
-    absl::PrintF("CharClass added: [%s]", desc);
+    re2::internal::PrintF("\n");
+    re2::internal::PrintF("CharClass added: [%s]", desc);
     for (int k = 0; t->add[k].lo >= 0; k++)
-      absl::PrintF(" %d-%d", t->add[k].lo, t->add[k].hi);
-    absl::PrintF("\n");
+      re2::internal::PrintF(" %d-%d", t->add[k].lo, t->add[k].hi);
+    re2::internal::PrintF("\n");
     if (t->remove >= 0)
-      absl::PrintF("Removed > %d\n", t->remove);
-    absl::PrintF("\twant:");
+      re2::internal::PrintF("Removed > %d\n", t->remove);
+    re2::internal::PrintF("\twant:");
     for (int k = 0; t->final[k].lo >= 0; k++)
-      absl::PrintF(" %d-%d", t->final[k].lo, t->final[k].hi);
-    absl::PrintF("\n");
-    absl::PrintF("\thave:");
+      re2::internal::PrintF(" %d-%d", t->final[k].lo, t->final[k].hi);
+    re2::internal::PrintF("\n");
+    re2::internal::PrintF("\thave:");
   }
 
   for (typename CharClass::iterator it = cc->begin(); it != cc->end(); ++it)
-    absl::PrintF(" %d-%d", it->lo, it->hi);
-  absl::PrintF("\n");
+    re2::internal::PrintF(" %d-%d", it->lo, it->hi);
+  re2::internal::PrintF("\n");
 }
 
 bool ShouldContain(CCTest *t, int x) {
@@ -157,7 +156,7 @@ bool CorrectCC(CharClass *cc, CCTest *t, const char *desc) {
   }
   if (cc->size() != size) {
     Broke(desc, t, cc);
-    absl::PrintF("wrong size: want %d have %d\n", size, cc->size());
+    re2::internal::PrintF("wrong size: want %d have %d\n", size, cc->size());
     return false;
   }
 
@@ -166,7 +165,7 @@ bool CorrectCC(CharClass *cc, CCTest *t, const char *desc) {
       j = Runemax;
     if (ShouldContain(t, j) != cc->Contains(j)) {
       Broke(desc, t, cc);
-      absl::PrintF("want contains(%d)=%d, got %d\n",
+      re2::internal::PrintF("want contains(%d)=%d, got %d\n",
                    j, ShouldContain(t, j), cc->Contains(j));
       return false;
     }
@@ -179,7 +178,7 @@ bool CorrectCC(CharClass *cc, CCTest *t, const char *desc) {
     if (ShouldContain(t, j) == ncc->Contains(j)) {
       Broke(desc, t, cc);
       Broke("ncc", NULL, ncc);
-      absl::PrintF("want ncc contains(%d)!=%d, got %d\n",
+      re2::internal::PrintF("want ncc contains(%d)!=%d, got %d\n",
                    j, ShouldContain(t, j), ncc->Contains(j));
       Delete(ncc);
       return false;
@@ -187,7 +186,7 @@ bool CorrectCC(CharClass *cc, CCTest *t, const char *desc) {
     if (ncc->size() != Runemax+1 - cc->size()) {
       Broke(desc, t, cc);
       Broke("ncc", NULL, ncc);
-      absl::PrintF("ncc size should be %d is %d\n",
+      re2::internal::PrintF("ncc size should be %d is %d\n",
                    Runemax+1 - cc->size(), ncc->size());
       Delete(ncc);
       return false;
@@ -199,7 +198,7 @@ bool CorrectCC(CharClass *cc, CCTest *t, const char *desc) {
 
 TEST(TestCharClassBuilder, Adds) {
   int nfail = 0;
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(tests); i++) {
     CharClassBuilder ccb;
     CCTest* t = &tests[i];
     for (int j = 0; t->add[j].lo >= 0; j++)

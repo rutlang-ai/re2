@@ -69,8 +69,8 @@ assert(RE2::PartialMatch("hello", "e"))
 #### Submatch Extraction
 
 Both matching functions take additional arguments in which submatches will be stored.
-The argument can be a `string*`, or an integer type, or the type `absl::string_view*`.
-(The `absl::string_view` type is very similar to the `std::string_view` type,
+The argument can be a `string*`, or an integer type, or the type `re2::StringView*`.
+(The `re2::StringView` type is very similar to the `std::string_view` type,
 but for historical reasons, RE2 uses the former.)
 A `string_view` is a pointer to the original input text, along with a count.
 It behaves like a string but doesn't carry its own storage.
@@ -161,50 +161,60 @@ The simplest installation instructions are:
 	make install
 	make testinstall
 
-Building RE2 requires a C++17 compiler and the [Abseil](https://github.com/abseil/abseil-cpp) library.
-Building the tests and benchmarks requires
-[GoogleTest](https://github.com/google/googletest)
-and [Benchmark](https://github.com/google/benchmark).
-To obtain those:
+This fork requires a C++20 compiler and POSIX (tested on Linux with GCC and Clang).
+It does not link Abseil, libstdc++, libc++, libsupc++ or libc++abi. Standard library
+headers are still used for facilities that compile entirely into the caller, such
+as type traits and algorithms. Containa, SmallString and the fmt
+headers required by SmallString are vendored in `third_party/`; no dependency
+fetch is needed. Built-in Unicode tables remain available; the optional ICU C++
+backend is disabled because it would reintroduce a C++ runtime dependency.
 
-- Linux: `apt install libabsl-dev libgtest-dev libbenchmark-dev`
-- macOS: `brew install abseil googletest google-benchmark pkg-config-wrapper`
-- Windows: `vcpkg install abseil gtest benchmark` \
-  or `vcpkg add port abseil gtest benchmark`
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
 
-Once those are installed, the build has to be able to find them.
-If the standard Makefile has trouble, then switching to CMake can help:
+The default build includes `re2_no_stdlib_test`, a consumer linked without a C++
+standard library. On Linux, a second test checks both the executable and library
+for forbidden dependencies and unresolved runtime symbols. Run the same commands
+with `-DBUILD_SHARED_LIBS=OFF` to verify a static archive. The shared library keeps
+its small malloc/free allocation ABI and static initialization guards private.
 
-	rm -rf build
-	cmake -DRE2_TEST=ON -DRE2_BENCHMARK=ON -S . -B build
-	cd build
-	make
-	make test
-	make install
+The API/ABI changes in this fork require consumers to rebuild (SONAME 12):
 
-When using CMake, with benchmarks enabled, `make test` builds and runs test binaries
-and builds a `regexp_benchmark` binary but does not run it.
-If you don't need the tests or benchmarks at all, you can omit the corresponding `-D` arguments,
-and then you don't need the GoogleTest or Benchmark dependencies either.
+| Previous type | Replacement |
+| --- | --- |
+| `std::string` | `re2::String` (`small::small_string`) |
+| `absl::string_view` | `re2::StringView` (also `re2::StringPiece`) |
+| `std::vector<T>` | `re2::Vector<T>` (Containa `small_vectra`) |
+| `std::map<K,V>` | `re2::Map<K,V>` (Containa `btree_map`) |
 
-Another useful option is `-DRE2_USE_ICU=ON`, which adds a dependency on the
-ICU Unicode library but also extends the list of property names available in the `\p` and `\P` patterns.
+`StringView` accepts pointer/length pairs and existing string-like objects without
+copying. Captures that own their bytes use `re2::String`. B-tree mutation can
+invalidate iterators and references. SmallString has a 32-bit size limit; consult
+its upstream documentation before passing multi-gigabyte patterns or captures.
 
-CMake can also be used to generate Visual Studio and Xcode projects, as well as
-Cygwin, MinGW, and MSYS makefiles.
+A C++ compiler driver normally adds a standard library even if the code does not
+use it. For standalone consumers use `clang++ -std=c++20 -fno-exceptions -fno-rtti
+-nostdlib++ ... -lre2 -lm -pthread`, or GCC's `-nodefaultlibs` with `-lm -lc -lgcc_s
+-lgcc`. In unoptimized builds using libstdc++ headers also define
+`_GLIBCXX_NO_ASSERTIONS` to avoid its out-of-line assertion helper; CMake propagates
+this definition. RE2 and vendor assertions remain enabled in Debug builds.
+Allocation failure terminates the process; there are no C++ exception paths.
 
- - Visual Studio users: You need Visual Studio 2019 or later.
- - Cygwin users: You must run CMake from the Cygwin command line, not the Windows command line.
+To run the original tests, install GoogleTest and configure with `-DRE2_TEST=ON`.
+The optional upstream benchmarks additionally need Google Benchmark and
+`-DRE2_BENCHMARK=ON`. Test, benchmark and Python/pybind11/Embind executables can use their
+own C++ runtime; they are separate from the runtime-free library and standalone
+consumer test. The Python wrapper converts the new container types explicitly.
 
-If you are adding RE2 to your own CMake project,
-CMake has two ways to use a dependency: `add_subdirectory()`,
-which is when the dependency's **_sources_** are in a subdirectory of your project;
-and `find_package()`, which is when the dependency's
-**_binaries_** have been built and installed somewhere on your system.
-The Abseil documentation walks through the former [here](https://abseil.io/docs/cpp/quickstart-cmake)
-versus the latter [here](https://abseil.io/docs/cpp/tools/cmake-installs).
-Once you get Abseil working, getting RE2 working will be a very similar process and,
-either way, `target_link_libraries(… re2::re2)` should Just Work™.
+See [the migration and benchmark notes](doc/runtime-free.md) for reproducible
+performance checks and the recorded comparison.
+
+Use `add_subdirectory()` or an installed `find_package(re2)` target, then
+`target_link_libraries(your_target PRIVATE re2::re2)`. The installed package includes
+all required headers and does not find or link Abseil.
 
 If you are using [Bazel](https://bazel.io), it will handle the dependencies for you,
 although you still need to download Bazel,

@@ -10,7 +10,7 @@ include(CMakePackageConfigHelpers)
 include(CTest)
 include(GNUInstallDirs)
 
-set(RE2_CXX_VERSION cxx_std_17)
+set(RE2_CXX_VERSION cxx_std_20)
 
 option(BUILD_SHARED_LIBS "build shared libraries" OFF)
 option(RE2_USE_ICU "build against ICU for full Unicode properties support" OFF)
@@ -40,7 +40,7 @@ set(REQUIRES)
 
 # ABI version
 # http://tldp.org/HOWTO/Program-Library-HOWTO/shared-libraries.html
-set(SONAME 11)
+set(SONAME 12)
 
 set(EXTRA_TARGET_LINK_LIBRARIES)
 
@@ -69,32 +69,6 @@ if(UNIX)
   find_package(Threads REQUIRED)
 endif()
 
-set(ABSL_DEPS
-    absl_absl_check
-    absl_absl_log
-    absl_base
-    absl_core_headers
-    absl_fixed_array
-    absl_flags
-    absl_flat_hash_map
-    absl_flat_hash_set
-    absl_hash
-    absl_inlined_vector
-    absl_optional
-    absl_span
-    absl_str_format
-    absl_strings
-    absl_synchronization
-    )
-
-# If a top-level project has called add_directory(abseil-cpp) already (possibly
-# indirectly), let that take precedence over any copy of Abseil that might have
-# been installed on the system. And likewise for ICU, GoogleTest and Benchmark.
-if(NOT TARGET absl::base)
-  find_package(absl REQUIRED)
-endif()
-list(APPEND REQUIRES ${ABSL_DEPS})
-
 if(RE2_USE_ICU)
   if(NOT TARGET ICU::uc)
     find_package(ICU REQUIRED COMPONENTS uc)
@@ -111,6 +85,7 @@ endif()
 list(JOIN REQUIRES " " REQUIRES)
 
 set(RE2_SOURCES
+    re2/runtime.cc
     re2/bitmap256.cc
     re2/bitstate.cc
     re2/compile.cc
@@ -140,10 +115,42 @@ set(RE2_HEADERS
     re2/re2.h
     re2/set.h
     re2/stringpiece.h
+    re2/support.h
     )
 
 add_library(re2 ${RE2_SOURCES})
 target_compile_features(re2 PUBLIC ${RE2_CXX_VERSION})
+# This fork uses POSIX synchronization and the Itanium allocation ABI.
+if(NOT UNIX)
+  message(FATAL_ERROR "The runtime-free RE2 port currently supports POSIX systems")
+endif()
+if(RE2_USE_ICU)
+  message(FATAL_ERROR "ICU's C++ API introduces a C++ runtime dependency; use the built-in Unicode tables")
+endif()
+target_compile_options(re2 PRIVATE -fno-exceptions -fno-rtti)
+# libstdc++ headers otherwise auto-enable out-of-line assertion helpers at -O0.
+# RE2 and vendor assertions remain enabled in Debug builds.
+target_compile_definitions(re2 PUBLIC _GLIBCXX_NO_ASSERTIONS)
+function(re2_no_stdlib target)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_link_options(${target} PRIVATE -nostdlib++)
+    target_link_libraries(${target} PRIVATE m)
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_link_options(${target} PRIVATE -nodefaultlibs)
+    target_link_libraries(${target} PRIVATE m c gcc_s gcc)
+  else()
+    message(FATAL_ERROR "Runtime-free linking requires GCC or Clang")
+  endif()
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(${target} PRIVATE -Wl,--no-undefined -Wl,--as-needed)
+  endif()
+endfunction()
+re2_no_stdlib(re2)
+if(BUILD_SHARED_LIBS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Keep allocation/guard ABI entry points private to this shared object.
+  target_link_options(re2 PRIVATE "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/libre2.symbols")
+  set_property(TARGET re2 APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/libre2.symbols")
+endif()
 target_include_directories(re2 PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 # CMake gives "set_target_properties called with incorrect number of arguments."
 # errors if we don't quote ${RE2_HEADERS}, so quote it despite prevailing style.
@@ -162,15 +169,35 @@ if(UNIX)
   target_link_libraries(re2 PUBLIC Threads::Threads)
 endif()
 
-foreach(dep ${ABSL_DEPS})
-  # Work around https://gitlab.kitware.com/cmake/cmake/-/issues/16899. >:(
-  string(PREPEND dep "^")
-  string(REGEX REPLACE "\\^absl_" "absl::" dep ${dep})
-  target_link_libraries(re2 PUBLIC ${dep})
-endforeach()
-
 if(RE2_USE_ICU)
   target_link_libraries(re2 PUBLIC ICU::uc)
+endif()
+
+option(RE2_VERIFY_NO_STDLIB "Build a consumer without a C++ standard library" ON)
+if(RE2_VERIFY_NO_STDLIB)
+  add_executable(re2_no_stdlib_test re2/testing/no_stdlib_test.cc)
+  target_compile_options(re2_no_stdlib_test PRIVATE -fno-exceptions -fno-rtti)
+  target_link_libraries(re2_no_stdlib_test PRIVATE re2)
+  re2_no_stdlib(re2_no_stdlib_test)
+  add_test(NAME no_stdlib COMMAND re2_no_stdlib_test)
+  add_executable(re2_rw_mutex_test re2/testing/rw_mutex_test.cc)
+  target_compile_options(re2_rw_mutex_test PRIVATE -fno-exceptions -fno-rtti)
+  target_link_libraries(re2_rw_mutex_test PRIVATE re2)
+  re2_no_stdlib(re2_rw_mutex_test)
+  add_test(NAME rw_mutex COMMAND re2_rw_mutex_test)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_test(NAME no_stdlib_dependencies COMMAND ${CMAKE_COMMAND}
+      -DARTIFACT=$<TARGET_FILE:re2_no_stdlib_test> -DLIBRARY=$<TARGET_FILE:re2>
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyNoStdlib.cmake)
+  endif()
+endif()
+
+option(RE2_RUNTIME_BENCHMARK "Build the standalone runtime migration benchmark" OFF)
+if(RE2_RUNTIME_BENCHMARK)
+  add_executable(re2_runtime_benchmark re2/testing/runtime_benchmark.cc)
+  target_compile_options(re2_runtime_benchmark PRIVATE -fno-exceptions -fno-rtti)
+  target_link_libraries(re2_runtime_benchmark PRIVATE re2)
+  re2_no_stdlib(re2_runtime_benchmark)
 endif()
 
 if(RE2_BUILD_TESTING OR RE2_TEST OR RE2_BENCHMARK)
@@ -185,7 +212,7 @@ if(RE2_BUILD_TESTING OR RE2_TEST OR RE2_BENCHMARK)
       util/pcre.cc
       )
 
-  add_library(testing ${TESTING_SOURCES})
+  add_library(testing STATIC ${TESTING_SOURCES})
   if(BUILD_SHARED_LIBS AND WIN32)
     target_compile_definitions(testing PRIVATE -DRE2_BUILD_TESTING_DLL)
   endif()
@@ -259,6 +286,12 @@ if(RE2_INSTALL)
           FRAMEWORK DESTINATION ${CMAKE_INSTALL_LIBDIR}
           PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/re2
           INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(DIRECTORY third_party/containa/container DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/third_party/containa FILES_MATCHING PATTERN "*.hpp")
+  install(FILES third_party/smallstring/smallstring.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/third_party/smallstring)
+  install(DIRECTORY third_party/fmt/include/fmt DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/third_party/fmt/include FILES_MATCHING PATTERN "*.h")
+  install(FILES third_party/containa/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/re2 RENAME Containa-LICENSE)
+  install(FILES third_party/smallstring/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/re2 RENAME SmallString-LICENSE)
+  install(FILES third_party/fmt/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/re2 RENAME fmt-LICENSE)
   install(EXPORT re2Targets
           DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/re2
           NAMESPACE re2::)

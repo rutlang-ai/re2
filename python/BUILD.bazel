@@ -12,7 +12,6 @@ pybind_extension(
     srcs = ["_re2.cc"],
     deps = [
         "//:re2",
-        "@abseil-cpp//absl/strings",
     ],
 )
 

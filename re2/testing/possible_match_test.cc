@@ -7,10 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "absl/base/macros.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/escaping.h"
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/prog.h"
 #include "re2/re2.h"
@@ -24,8 +21,8 @@ namespace re2 {
 // Test that C++ strings are compared as uint8s, not int8s.
 // PossibleMatchRange doesn't depend on this, but callers probably will.
 TEST(CplusplusStrings, EightBit) {
-  std::string s = "\x70";
-  std::string t = "\xA0";
+  re2::String s = "\x70";
+  re2::String t = "\xA0";
   EXPECT_LT(s, t);
 }
 
@@ -110,12 +107,12 @@ static PrefixTest tests[] = {
 };
 
 TEST(PossibleMatchRange, HandWritten) {
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(tests); i++) {
     for (size_t j = 0; j < 2; j++) {
       const PrefixTest& t = tests[i];
-      std::string min, max;
+      re2::String min, max;
       if (j == 0) {
-        ABSL_LOG(INFO) << "Checking regexp=" << absl::CEscape(t.regexp);
+        RE2_LOG(INFO) << "Checking regexp=" << re2::internal::CEscape(t.regexp);
         Regexp* re = Regexp::Parse(t.regexp, Regexp::LikePerl, NULL);
         ASSERT_TRUE(re != NULL);
         Prog* prog = re->CompileToProg(0);
@@ -135,7 +132,7 @@ TEST(PossibleMatchRange, HandWritten) {
 
 // Test cases where PossibleMatchRange should return false.
 TEST(PossibleMatchRange, Failures) {
-  std::string min, max;
+  re2::String min, max;
 
   // Fails because no room to write max.
   EXPECT_FALSE(RE2("abc").PossibleMatchRange(&min, &max, 0));
@@ -145,26 +142,26 @@ TEST(PossibleMatchRange, Failures) {
   // are no valid UTF-8 strings beginning with byte 0xFF.
   EXPECT_FALSE(RE2("[\\s\\S]+", RE2::Latin1).
                PossibleMatchRange(&min, &max, 10))
-      << "min=" << absl::CEscape(min) << ", max=" << absl::CEscape(max);
+      << "min=" << re2::internal::CEscape(min) << ", max=" << re2::internal::CEscape(max);
   EXPECT_FALSE(RE2("[\\0-\xFF]+", RE2::Latin1).
                PossibleMatchRange(&min, &max, 10))
-      << "min=" << absl::CEscape(min) << ", max=" << absl::CEscape(max);
+      << "min=" << re2::internal::CEscape(min) << ", max=" << re2::internal::CEscape(max);
   EXPECT_FALSE(RE2(".+hello", RE2::Latin1).
                PossibleMatchRange(&min, &max, 10))
-      << "min=" << absl::CEscape(min) << ", max=" << absl::CEscape(max);
+      << "min=" << re2::internal::CEscape(min) << ", max=" << re2::internal::CEscape(max);
   EXPECT_FALSE(RE2(".*hello", RE2::Latin1).
                PossibleMatchRange(&min, &max, 10))
-      << "min=" << absl::CEscape(min) << ", max=" << absl::CEscape(max);
+      << "min=" << re2::internal::CEscape(min) << ", max=" << re2::internal::CEscape(max);
   EXPECT_FALSE(RE2(".*", RE2::Latin1).
                PossibleMatchRange(&min, &max, 10))
-      << "min=" << absl::CEscape(min) << ", max=" << absl::CEscape(max);
+      << "min=" << re2::internal::CEscape(min) << ", max=" << re2::internal::CEscape(max);
   EXPECT_FALSE(RE2("\\C*").
                PossibleMatchRange(&min, &max, 10))
-      << "min=" << absl::CEscape(min) << ", max=" << absl::CEscape(max);
+      << "min=" << re2::internal::CEscape(min) << ", max=" << re2::internal::CEscape(max);
 
   // Fails because it's a malformed regexp.
   EXPECT_FALSE(RE2("*hello").PossibleMatchRange(&min, &max, 10))
-      << "min=" << absl::CEscape(min) << ", max=" << absl::CEscape(max);
+      << "min=" << re2::internal::CEscape(min) << ", max=" << re2::internal::CEscape(max);
 }
 
 // Exhaustive test: generate all regexps within parameters,
@@ -175,10 +172,10 @@ class PossibleMatchTester : public RegexpGenerator {
  public:
   PossibleMatchTester(int maxatoms,
                       int maxops,
-                      const std::vector<std::string>& alphabet,
-                      const std::vector<std::string>& ops,
+                      const re2::Vector<re2::String>& alphabet,
+                      const re2::Vector<re2::String>& ops,
                       int maxstrlen,
-                      const std::vector<std::string>& stralphabet)
+                      const re2::Vector<re2::String>& stralphabet)
     : RegexpGenerator(maxatoms, maxops, alphabet, ops),
       strgen_(maxstrlen, stralphabet),
       regexps_(0), tests_(0) { }
@@ -187,7 +184,7 @@ class PossibleMatchTester : public RegexpGenerator {
   int tests()    { return tests_; }
 
   // Needed for RegexpGenerator interface.
-  void HandleRegexp(const std::string& regexp);
+  void HandleRegexp(const re2::String& regexp);
 
  private:
   StringGenerator strgen_;
@@ -201,28 +198,28 @@ class PossibleMatchTester : public RegexpGenerator {
 
 // Processes a single generated regexp.
 // Checks that all accepted strings agree with the prefix range.
-void PossibleMatchTester::HandleRegexp(const std::string& regexp) {
+void PossibleMatchTester::HandleRegexp(const re2::String& regexp) {
   regexps_++;
 
-  ABSL_VLOG(3) << absl::CEscape(regexp);
+  RE2_VLOG(3) << re2::internal::CEscape(regexp);
 
   RE2 re(regexp, RE2::Latin1);
   ASSERT_EQ(re.error(), "");
 
-  std::string min, max;
+  re2::String min, max;
   if(!re.PossibleMatchRange(&min, &max, 10)) {
     // There's no good max for "\\C*".  Can't use strcmp
     // because sometimes it gets embedded in more
     // complicated expressions.
     if(strstr(regexp.c_str(), "\\C*"))
       return;
-    ABSL_LOG(QFATAL) << "PossibleMatchRange failed on: "
-                     << absl::CEscape(regexp);
+    RE2_LOG(QFATAL) << "PossibleMatchRange failed on: "
+                     << re2::internal::CEscape(regexp);
   }
 
   strgen_.Reset();
   while (strgen_.HasNext()) {
-    absl::string_view s = strgen_.Next();
+    re2::StringView s = strgen_.Next();
     tests_++;
     if (!RE2::FullMatch(s, re))
       continue;
@@ -244,7 +241,7 @@ TEST(PossibleMatchRange, Exhaustive) {
                  RegexpGenerator::EgrepOps(),
                  stringlen, Explode("ab4"));
   t.Generate();
-  ABSL_LOG(INFO) << t.regexps() << " regexps, "
+  RE2_LOG(INFO) << t.regexps() << " regexps, "
                  << t.tests() << " tests";
 }
 

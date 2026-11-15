@@ -11,7 +11,7 @@
 
 #include <string>
 
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/testing/regexp_generator.h"
 #include "util/utf.h"
@@ -35,23 +35,23 @@ static int64_t IntegerPower(int i, int e) {
 // If all of these hold, the StringGenerator is behaving.
 // Assumes that the alphabet is sorted, so that the generated
 // strings can just be compared lexicographically.
-static void RunTest(int len, const std::string& alphabet, bool donull) {
+static void RunTest(int len, const re2::String& alphabet, bool donull) {
   StringGenerator g(len, Explode(alphabet));
 
   int n = 0;
   int last_l = -1;
-  std::string last_s;
+  re2::String last_s;
 
   if (donull) {
     g.GenerateNULL();
     EXPECT_TRUE(g.HasNext());
-    absl::string_view sp = g.Next();
+    re2::StringView sp = g.Next();
     EXPECT_EQ(sp.data(), static_cast<const char*>(NULL));
     EXPECT_EQ(sp.size(), size_t{0});
   }
 
   while (g.HasNext()) {
-    std::string s = std::string(g.Next());
+    re2::String s = re2::String(g.Next());
     n++;
 
     // Check that all characters in s appear in alphabet.
@@ -109,6 +109,12 @@ TEST(StringGenerator, GenNULL) {
   RunTest(5, "", true);
   RunTest(3, "abc", true);
   RunTest(4, "abc\xE2\x98\xBA", true);
+}
+
+TEST(StringGenerator, BinaryFormatAtoms) {
+  auto format = internal::ParsedFormat<'s'>::New("x%s%%x");
+  ASSERT_TRUE(format);
+  EXPECT_EQ(internal::StrFormat(*format, String("a\0b", 3)), String("xa\0b%x", 6));
 }
 
 }  // namespace re2

@@ -54,15 +54,8 @@
 #include <string.h>
 
 #include <algorithm>
-#include <map>
-#include <string>
 
-#include "absl/container/fixed_array.h"
-#include "absl/container/inlined_vector.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/pod_array.h"
 #include "re2/prog.h"
 #include "re2/sparse_set.h"
@@ -191,7 +184,7 @@ void OnePass_Checks() {
                 "kMaxCap disagrees with kMaxOnePassCapture");
 }
 
-static bool Satisfy(uint32_t cond, absl::string_view context, const char* p) {
+static bool Satisfy(uint32_t cond, re2::StringView context, const char* p) {
   uint32_t satisfied = Prog::EmptyFlags(context, p);
   if (cond & kEmptyAllFlags & ~satisfied)
     return false;
@@ -213,11 +206,11 @@ static inline OneState* IndexToNode(uint8_t* nodes, int statesize,
   return reinterpret_cast<OneState*>(nodes + statesize*nodeindex);
 }
 
-bool Prog::SearchOnePass(absl::string_view text, absl::string_view context,
+bool Prog::SearchOnePass(re2::StringView text, re2::StringView context,
                          Anchor anchor, MatchKind kind,
-                         absl::string_view* match, int nmatch) {
+                         re2::StringView* match, int nmatch) {
   if (anchor != kAnchored && kind != kFullMatch) {
-    ABSL_LOG(DFATAL) << "Cannot use SearchOnePass for unanchored matches.";
+    RE2_LOG(DFATAL) << "Cannot use SearchOnePass for unanchored matches.";
     return false;
   }
 
@@ -339,7 +332,7 @@ done:
   if (!matched)
     return false;
   for (int i = 0; i < nmatch; i++)
-    match[i] = absl::string_view(
+    match[i] = re2::StringView(
         matchcap[2 * i],
         static_cast<size_t>(matchcap[2 * i + 1] - matchcap[2 * i]));
   return true;
@@ -403,23 +396,23 @@ bool Prog::IsOnePass() {
   int stacksize = inst_count(kInstCapture) +
                   inst_count(kInstEmptyWidth) +
                   inst_count(kInstNop) + 1;  // + 1 for start inst
-  absl::FixedArray<InstCond, 64> stack_storage(stacksize);
+  re2::internal::FixedArray<InstCond, 64> stack_storage(stacksize);
   InstCond* stack = stack_storage.data();
 
   int size = this->size();
-  absl::FixedArray<int, 128> nodebyid_storage(size, -1);  // indexed by ip
+  re2::internal::FixedArray<int, 128> nodebyid_storage(size, -1);  // indexed by ip
   int* nodebyid = nodebyid_storage.data();
 
   // Originally, nodes was a uint8_t[maxnodes*statesize], but that was
   // unnecessarily optimistic: why allocate a large amount of memory
   // upfront for a large program when it is unlikely to be one-pass?
-  absl::InlinedVector<uint8_t, 2048> nodes;
+  re2::internal::InlinedVector<uint8_t, 2048> nodes;
 
   Instq tovisit(size), workq(size);
   AddQ(&tovisit, start());
   nodebyid[start()] = 0;
   int nalloc = 1;
-  nodes.insert(nodes.end(), statesize, 0);
+  nodes.resize(nodes.size() + statesize, 0);
   for (Instq::iterator it = tovisit.begin(); it != tovisit.end(); ++it) {
     int id = *it;
     int nodeindex = nodebyid[id];
@@ -444,13 +437,13 @@ bool Prog::IsOnePass() {
       Prog::Inst* ip = inst(id);
       switch (ip->opcode()) {
         default:
-          ABSL_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
+          RE2_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
           break;
 
         case kInstAltMatch:
           // TODO(rsc): Ignoring kInstAltMatch optimization.
           // Should implement it in this engine, but it's subtle.
-          ABSL_DCHECK(!ip->last());
+          RE2_DCHECK(!ip->last());
           // If already on work queue, (1) is violated: bail out.
           if (!AddQ(&workq, id+1))
             goto fail;
@@ -462,7 +455,7 @@ bool Prog::IsOnePass() {
           if (nextindex == -1) {
             if (nalloc >= maxnodes) {
               if (ExtraDebug)
-                ABSL_LOG(ERROR) << absl::StrFormat(
+                RE2_LOG(ERROR) << re2::internal::StrFormat(
                     "Not OnePass: hit node limit %d >= %d", nalloc, maxnodes);
               goto fail;
             }
@@ -470,7 +463,7 @@ bool Prog::IsOnePass() {
             AddQ(&tovisit, ip->out());
             nodebyid[ip->out()] = nalloc;
             nalloc++;
-            nodes.insert(nodes.end(), statesize, 0);
+            nodes.resize(nodes.size() + statesize, 0);
             // Update node because it might have been invalidated.
             node = IndexToNode(nodes.data(), statesize, nodeindex);
           }
@@ -487,7 +480,7 @@ bool Prog::IsOnePass() {
               node->action[b] = newact;
             } else if (act != newact) {
               if (ExtraDebug)
-                ABSL_LOG(ERROR) << absl::StrFormat(
+                RE2_LOG(ERROR) << re2::internal::StrFormat(
                     "Not OnePass: conflict on byte %#x at state %d", c, *it);
               goto fail;
             }
@@ -508,7 +501,7 @@ bool Prog::IsOnePass() {
                 node->action[b] = newact;
               } else if (act != newact) {
                 if (ExtraDebug)
-                  ABSL_LOG(ERROR) << absl::StrFormat(
+                  RE2_LOG(ERROR) << re2::internal::StrFormat(
                       "Not OnePass: conflict on byte %#x at state %d", c, *it);
                 goto fail;
               }
@@ -549,7 +542,7 @@ bool Prog::IsOnePass() {
           // If already on work queue, (1) is violated: bail out.
           if (!AddQ(&workq, ip->out())) {
             if (ExtraDebug)
-              ABSL_LOG(ERROR) << absl::StrFormat(
+              RE2_LOG(ERROR) << re2::internal::StrFormat(
                   "Not OnePass: multiple paths %d -> %d", *it, ip->out());
             goto fail;
           }
@@ -560,7 +553,7 @@ bool Prog::IsOnePass() {
           if (matched) {
             // (3) is violated
             if (ExtraDebug)
-              ABSL_LOG(ERROR) << absl::StrFormat(
+              RE2_LOG(ERROR) << re2::internal::StrFormat(
                   "Not OnePass: multiple matches from %d", *it);
             goto fail;
           }
@@ -581,34 +574,34 @@ bool Prog::IsOnePass() {
     }
   }
 
-  if (ExtraDebug) {  // For debugging, dump one-pass NFA to ABSL_LOG(ERROR).
-    ABSL_LOG(ERROR) << "bytemap:\n" << DumpByteMap();
-    ABSL_LOG(ERROR) << "prog:\n" << Dump();
+  if (ExtraDebug) {  // For debugging, dump one-pass NFA to RE2_LOG(ERROR).
+    RE2_LOG(ERROR) << "bytemap:\n" << DumpByteMap();
+    RE2_LOG(ERROR) << "prog:\n" << Dump();
 
-    std::map<int, int> idmap;
+    re2::Map<int, int> idmap;
     for (int i = 0; i < size; i++)
       if (nodebyid[i] != -1)
         idmap[nodebyid[i]] = i;
 
-    std::string dump;
+    re2::String dump;
     for (Instq::iterator it = tovisit.begin(); it != tovisit.end(); ++it) {
       int id = *it;
       int nodeindex = nodebyid[id];
       if (nodeindex == -1)
         continue;
       OneState* node = IndexToNode(nodes.data(), statesize, nodeindex);
-      dump += absl::StrFormat("node %d id=%d: matchcond=%#x\n",
+      dump += re2::internal::StrFormat("node %d id=%d: matchcond=%#x\n",
                               nodeindex, id, node->matchcond);
       for (int i = 0; i < bytemap_range_; i++) {
         if ((node->action[i] & kImpossible) == kImpossible)
           continue;
-        dump += absl::StrFormat("  %d cond %#x -> %d id=%d\n",
+        dump += re2::internal::StrFormat("  %d cond %#x -> %d id=%d\n",
                                 i, node->action[i] & 0xFFFF,
                                 node->action[i] >> kIndexShift,
                                 idmap[node->action[i] >> kIndexShift]);
       }
     }
-    ABSL_LOG(ERROR) << "nodes:\n" << dump;
+    RE2_LOG(ERROR) << "nodes:\n" << dump;
   }
 
   dfa_mem_ -= nalloc*statesize;

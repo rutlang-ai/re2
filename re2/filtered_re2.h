@@ -22,10 +22,8 @@
 // in the text to get the actual regexp matches.
 
 #include <memory>
-#include <string>
-#include <vector>
 
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/re2.h"
 
 namespace re2 {
@@ -48,7 +46,7 @@ class FilteredRE2 {
   // Uses RE2 constructor to create a RE2 object (re). Returns
   // re->error_code(). If error_code is other than NoError, then re is
   // deleted and not added to re2_vec_.
-  RE2::ErrorCode Add(absl::string_view pattern,
+  RE2::ErrorCode Add(re2::StringView pattern,
                      const RE2::Options& options,
                      int* id);
 
@@ -58,33 +56,33 @@ class FilteredRE2 {
   // string matching, it should be performed in a case-insensitive
   // way or the search text should be lowercased first.  Call after
   // all Add calls are done.
-  void Compile(std::vector<std::string>* strings_to_match);
+  void Compile(re2::Vector<re2::String>* strings_to_match);
 
   // Returns the index of the first matching regexp.
   // Returns -1 on no match. Can be called prior to Compile.
   // Does not do any filtering: simply tries to Match the
   // regexps in a loop.
-  int SlowFirstMatch(absl::string_view text) const;
+  int SlowFirstMatch(re2::StringView text) const;
 
   // Returns the index of the first matching regexp.
   // Returns -1 on no match. Compile has to be called before
   // calling this.
-  int FirstMatch(absl::string_view text,
-                 const std::vector<int>& atoms) const;
+  int FirstMatch(re2::StringView text,
+                 const re2::Vector<int>& atoms) const;
 
   // Returns the indices of all matching regexps, after first clearing
   // matched_regexps.
-  bool AllMatches(absl::string_view text,
-                  const std::vector<int>& atoms,
-                  std::vector<int>* matching_regexps) const;
+  bool AllMatches(re2::StringView text,
+                  const re2::Vector<int>& atoms,
+                  re2::Vector<int>* matching_regexps) const;
 
   // Returns the indices of all potentially matching regexps after first
   // clearing potential_regexps.
   // A regexp is potentially matching if it passes the filter.
   // If a regexp passes the filter it may still not match.
   // A regexp that does not pass the filter is guaranteed to not match.
-  void AllPotentials(const std::vector<int>& atoms,
-                     std::vector<int>* potential_regexps) const;
+  void AllPotentials(const re2::Vector<int>& atoms,
+                     re2::Vector<int>* potential_regexps) const;
 
   // The number of regexps added.
   int NumRegexps() const { return static_cast<int>(re2_vec_.size()); }
@@ -97,11 +95,11 @@ class FilteredRE2 {
   void PrintPrefilter(int regexpid);
 
   // Useful for testing and debugging.
-  void RegexpsGivenStrings(const std::vector<int>& matched_atoms,
-                           std::vector<int>* passed_regexps);
+  void RegexpsGivenStrings(const re2::Vector<int>& matched_atoms,
+                           re2::Vector<int>* passed_regexps);
 
   // All the regexps in the FilteredRE2.
-  std::vector<RE2*> re2_vec_;
+  re2::Vector<RE2*> re2_vec_;
 
   // Has the FilteredRE2 been compiled using Compile()
   bool compiled_;

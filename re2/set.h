@@ -6,11 +6,9 @@
 #define RE2_SET_H_
 
 #include <memory>
-#include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/re2.h"
 
 namespace re2 {
@@ -51,7 +49,7 @@ class RE2::Set {
   // Indices are assigned in sequential order starting from 0.
   // Errors do not increment the index; if error is not NULL, *error will hold
   // the error message from the parser.
-  int Add(absl::string_view pattern, std::string* error);
+  int Add(re2::StringView pattern, re2::String* error);
 
   // Returns the number of patterns in the set.
   // Can be called before or after Compile().
@@ -67,20 +65,20 @@ class RE2::Set {
   // Fills v (if not NULL) with the indices of the matching regexps.
   // Callers must not expect v to be sorted.
   // The indices are in the half-open interval [0, Size()).
-  bool Match(absl::string_view text, std::vector<int>* v) const;
+  bool Match(re2::StringView text, re2::Vector<int>* v) const;
 
   // As above, but populates error_info (if not NULL) when none of the regexps
   // in the set matched. This can inform callers when DFA execution fails, for
   // example, because they might wish to handle that case differently.
-  bool Match(absl::string_view text, std::vector<int>* v,
+  bool Match(re2::StringView text, re2::Vector<int>* v,
              ErrorInfo* error_info) const;
 
  private:
-  typedef std::pair<std::string, re2::Regexp*> Elem;
+  typedef std::pair<re2::String, re2::Regexp*> Elem;
 
   RE2::Options options_;
   RE2::Anchor anchor_;
-  std::vector<Elem> elem_;
+  re2::Vector<Elem> elem_;
   bool compiled_;
   int size_;
   std::unique_ptr<re2::Prog> prog_;

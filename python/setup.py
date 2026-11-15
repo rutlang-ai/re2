@@ -29,8 +29,8 @@ Known differences between this module's API and the re module's API:
 
 Known issues with regard to building the C++ extension:
 
-  * Building requires RE2 to be installed on your system.
-    On Debian, for example, install the libre2-dev package.
+  * Building requires this runtime-free RE2 fork and its headers to be installed.
+    The extension requires a C++20 compiler.
   * Building requires pybind11 to be installed on your system OR venv.
     On Debian, for example, install the pybind11-dev package.
     For a venv, install the pybind11 package from PyPI.
@@ -101,7 +101,7 @@ ext_module = setuptools.Extension(
     sources=['_re2.cc'],
     include_dirs=list(include_dirs()),
     libraries=['re2'],
-    extra_compile_args=['-fvisibility=hidden'],
+    extra_compile_args=['-std=c++20', '-D_GLIBCXX_NO_ASSERTIONS', '-fvisibility=hidden'],
 )
 
 # We need `re2` to be a package, not a module, because it appears that

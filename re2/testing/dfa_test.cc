@@ -9,11 +9,7 @@
 #include <thread>
 #include <vector>
 
-#include "absl/base/macros.h"
-#include "absl/flags/flag.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/prog.h"
 #include "re2/re2.h"
@@ -23,9 +19,9 @@
 
 static const bool UsingMallocCounter = false;
 
-ABSL_FLAG(int, size, 8, "log2(number of DFA nodes)");
-ABSL_FLAG(int, repeat, 2, "Repetition count.");
-ABSL_FLAG(int, threads, 4, "number of threads");
+RE2_FLAG(int, size, 8, "log2(number of DFA nodes)");
+RE2_FLAG(int, repeat, 2, "Repetition count.");
+RE2_FLAG(int, threads, 4, "number of threads");
 
 namespace re2 {
 
@@ -52,8 +48,8 @@ static void DoBuild(Prog* prog) {
 
 TEST(Multithreaded, BuildEntireDFA) {
   // Create regexp with 2^FLAGS_size states in DFA.
-  std::string s = "a";
-  for (int i = 0; i < absl::GetFlag(FLAGS_size); i++)
+  re2::String s = "a";
+  for (int i = 0; i < re2::internal::GetFlag(FLAGS_size); i++)
     s += "[ab]";
   s += "b";
   Regexp* re = Regexp::Parse(s, Regexp::LikePerl, NULL);
@@ -71,14 +67,14 @@ TEST(Multithreaded, BuildEntireDFA) {
   }
 
   // Build the DFA simultaneously in a bunch of threads.
-  for (int i = 0; i < absl::GetFlag(FLAGS_repeat); i++) {
+  for (int i = 0; i < re2::internal::GetFlag(FLAGS_repeat); i++) {
     Prog* prog = re->CompileToProg(0);
     ASSERT_TRUE(prog != NULL);
 
-    std::vector<std::thread> threads;
-    for (int j = 0; j < absl::GetFlag(FLAGS_threads); j++)
+    re2::Vector<std::thread> threads;
+    for (int j = 0; j < re2::internal::GetFlag(FLAGS_threads); j++)
       threads.emplace_back(DoBuild, prog);
-    for (int j = 0; j < absl::GetFlag(FLAGS_threads); j++)
+    for (int j = 0; j < re2::internal::GetFlag(FLAGS_threads); j++)
       threads[j].join();
 
     // One more compile, to make sure everything is okay.
@@ -113,7 +109,7 @@ TEST(SingleThreaded, BuildEntireDFA) {
       delete prog;
     }
     if (UsingMallocCounter) {
-      //ABSL_LOG(INFO) << "limit " << limit << ", "
+      //RE2_LOG(INFO) << "limit " << limit << ", "
       //               << "prog usage " << progusage << ", "
       //               << "DFA budget " << dfamem << ", "
       //               << "total " << usage;
@@ -157,14 +153,14 @@ TEST(SingleThreaded, SearchDFA) {
   // Empirically, n = 18 is a good compromise between the two.
   const int n = 18;
 
-  Regexp* re = Regexp::Parse(absl::StrFormat("0[01]{%d}$", n),
+  Regexp* re = Regexp::Parse(re2::internal::StrFormat("0[01]{%d}$", n),
                              Regexp::LikePerl, NULL);
   ASSERT_TRUE(re != NULL);
 
   // The De Bruijn string for n ends with a 1 followed by n 0s in a row,
   // which is not a match for 0[01]{n}$.  Adding one more 0 is a match.
-  std::string no_match = DeBruijnString(n);
-  std::string match = no_match + "0";
+  re2::String no_match = DeBruijnString(n);
+  re2::String match = no_match + "0";
 
   int64_t usage;
   int64_t peak_usage;
@@ -176,12 +172,12 @@ TEST(SingleThreaded, SearchDFA) {
       bool matched = false;
       bool failed = false;
       matched =
-          prog->SearchDFA(match, absl::string_view(), Prog::kUnanchored,
+          prog->SearchDFA(match, re2::StringView(), Prog::kUnanchored,
                           Prog::kFirstMatch, NULL, &failed, NULL);
       ASSERT_FALSE(failed);
       ASSERT_TRUE(matched);
       matched =
-          prog->SearchDFA(no_match, absl::string_view(), Prog::kUnanchored,
+          prog->SearchDFA(no_match, re2::StringView(), Prog::kUnanchored,
                           Prog::kFirstMatch, NULL, &failed, NULL);
       ASSERT_FALSE(failed);
       ASSERT_FALSE(matched);
@@ -191,7 +187,7 @@ TEST(SingleThreaded, SearchDFA) {
     delete prog;
   }
   if (UsingMallocCounter) {
-    //ABSL_LOG(INFO) << "usage " << usage << ", "
+    //RE2_LOG(INFO) << "usage " << usage << ", "
     //               << "peak usage " << peak_usage;
     ASSERT_LT(usage, 1<<n);
     ASSERT_LT(peak_usage, 1<<n);
@@ -206,18 +202,18 @@ TEST(SingleThreaded, SearchDFA) {
 
 // Helper function: searches for match, which should match,
 // and no_match, which should not.
-static void DoSearch(Prog* prog, absl::string_view match,
-                     absl::string_view no_match) {
+static void DoSearch(Prog* prog, re2::StringView match,
+                     re2::StringView no_match) {
   for (int i = 0; i < 2; i++) {
     bool matched = false;
     bool failed = false;
     matched =
-        prog->SearchDFA(match, absl::string_view(), Prog::kUnanchored,
+        prog->SearchDFA(match, re2::StringView(), Prog::kUnanchored,
                         Prog::kFirstMatch, NULL, &failed, NULL);
     ASSERT_FALSE(failed);
     ASSERT_TRUE(matched);
     matched =
-        prog->SearchDFA(no_match, absl::string_view(), Prog::kUnanchored,
+        prog->SearchDFA(no_match, re2::StringView(), Prog::kUnanchored,
                         Prog::kFirstMatch, NULL, &failed, NULL);
     ASSERT_FALSE(failed);
     ASSERT_FALSE(matched);
@@ -231,11 +227,11 @@ TEST(Multithreaded, SearchDFA) {
 
   // Same as single-threaded test above.
   const int n = 18;
-  Regexp* re = Regexp::Parse(absl::StrFormat("0[01]{%d}$", n),
+  Regexp* re = Regexp::Parse(re2::internal::StrFormat("0[01]{%d}$", n),
                              Regexp::LikePerl, NULL);
   ASSERT_TRUE(re != NULL);
-  std::string no_match = DeBruijnString(n);
-  std::string match = no_match + "0";
+  re2::String no_match = DeBruijnString(n);
+  re2::String match = no_match + "0";
 
   // Check that single-threaded code works.
   {
@@ -250,14 +246,14 @@ TEST(Multithreaded, SearchDFA) {
 
   // Run the search simultaneously in a bunch of threads.
   // Reuse same flags for Multithreaded.BuildDFA above.
-  for (int i = 0; i < absl::GetFlag(FLAGS_repeat); i++) {
+  for (int i = 0; i < re2::internal::GetFlag(FLAGS_repeat); i++) {
     Prog* prog = re->CompileToProg(1<<n);
     ASSERT_TRUE(prog != NULL);
 
-    std::vector<std::thread> threads;
-    for (int j = 0; j < absl::GetFlag(FLAGS_threads); j++)
+    re2::Vector<std::thread> threads;
+    for (int j = 0; j < re2::internal::GetFlag(FLAGS_threads); j++)
       threads.emplace_back(DoSearch, prog, match, no_match);
-    for (int j = 0; j < absl::GetFlag(FLAGS_threads); j++)
+    for (int j = 0; j < re2::internal::GetFlag(FLAGS_threads); j++)
       threads[j].join();
 
     delete prog;
@@ -288,7 +284,7 @@ ReverseTest reverse_tests[] = {
 
 TEST(DFA, ReverseMatch) {
   int nfail = 0;
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(reverse_tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(reverse_tests); i++) {
     const ReverseTest& t = reverse_tests[i];
     Regexp* re = Regexp::Parse(t.regexp, Regexp::LikePerl, NULL);
     ASSERT_TRUE(re != NULL);
@@ -296,10 +292,10 @@ TEST(DFA, ReverseMatch) {
     ASSERT_TRUE(prog != NULL);
     bool failed = false;
     bool matched =
-        prog->SearchDFA(t.text, absl::string_view(), Prog::kUnanchored,
+        prog->SearchDFA(t.text, re2::StringView(), Prog::kUnanchored,
                         Prog::kFirstMatch, NULL, &failed, NULL);
     if (matched != t.match) {
-      ABSL_LOG(ERROR) << t.regexp << " on " << t.text << ": want " << t.match;
+      RE2_LOG(ERROR) << t.regexp << " on " << t.text << ": want " << t.match;
       nfail++;
     }
     delete prog;
@@ -344,26 +340,26 @@ CallbackTest callback_tests[] = {
 
 TEST(DFA, Callback) {
   int nfail = 0;
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(callback_tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(callback_tests); i++) {
     const CallbackTest& t = callback_tests[i];
     Regexp* re = Regexp::Parse(t.regexp, Regexp::LikePerl, NULL);
     ASSERT_TRUE(re != NULL);
     Prog* prog = re->CompileToProg(0);
     ASSERT_TRUE(prog != NULL);
-    std::string dump;
+    re2::String dump;
     prog->BuildEntireDFA(Prog::kLongestMatch, [&](const int* next, bool match) {
       ASSERT_TRUE(next != NULL);
       if (!dump.empty())
         dump += " ";
       dump += match ? "[[" : "[";
       for (int b = 0; b < prog->bytemap_range() + 1; b++)
-        dump += absl::StrFormat("%d,", next[b]);
+        dump += re2::internal::StrFormat("%d,", next[b]);
       dump.pop_back();
       dump += match ? "]]" : "]";
     });
     if (dump != t.dump) {
-      ABSL_LOG(ERROR) << t.regexp << " bytemap:\n" << prog->DumpByteMap();
-      ABSL_LOG(ERROR) << t.regexp << " dump:\n" << "got " << dump << "\n"
+      RE2_LOG(ERROR) << t.regexp << " bytemap:\n" << prog->DumpByteMap();
+      RE2_LOG(ERROR) << t.regexp << " dump:\n" << "got " << dump << "\n"
                       << "want " << t.dump;
       nfail++;
     }

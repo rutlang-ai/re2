@@ -8,13 +8,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/str_format.h"
+#include "re2/support.h"
 #include "re2/prefilter.h"
 
 namespace re2 {
@@ -38,7 +34,7 @@ PrefilterTree::~PrefilterTree() {
 
 void PrefilterTree::Add(Prefilter* prefilter) {
   if (compiled_) {
-    ABSL_LOG(DFATAL) << "Add called after Compile.";
+    RE2_LOG(DFATAL) << "Add called after Compile.";
     return;
   }
   if (prefilter != NULL && !KeepNode(prefilter)) {
@@ -49,9 +45,9 @@ void PrefilterTree::Add(Prefilter* prefilter) {
   prefilter_vec_.push_back(prefilter);
 }
 
-void PrefilterTree::Compile(std::vector<std::string>* atom_vec) {
+void PrefilterTree::Compile(re2::Vector<re2::String>* atom_vec) {
   if (compiled_) {
-    ABSL_LOG(DFATAL) << "Compile called already.";
+    RE2_LOG(DFATAL) << "Compile called already.";
     return;
   }
 
@@ -83,7 +79,7 @@ bool PrefilterTree::KeepNode(Prefilter* node) const {
 
   switch (node->op()) {
     default:
-      ABSL_LOG(DFATAL) << "Unexpected op in KeepNode: " << node->op();
+      RE2_LOG(DFATAL) << "Unexpected op in KeepNode: " << node->op();
       return false;
 
     case Prefilter::ALL:
@@ -95,7 +91,7 @@ bool PrefilterTree::KeepNode(Prefilter* node) const {
 
     case Prefilter::AND: {
       int j = 0;
-      std::vector<Prefilter*>* subs = node->subs();
+      re2::Vector<Prefilter*>* subs = node->subs();
       for (size_t i = 0; i < subs->size(); i++)
         if (KeepNode((*subs)[i]))
           (*subs)[j++] = (*subs)[i];
@@ -115,12 +111,12 @@ bool PrefilterTree::KeepNode(Prefilter* node) const {
 }
 
 void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
-                                    std::vector<std::string>* atom_vec) {
+                                    re2::Vector<re2::String>* atom_vec) {
   atom_vec->clear();
 
   // Build vector of all filter nodes, sorted topologically
   // from top to bottom in v.
-  std::vector<Prefilter*> v;
+  re2::Vector<Prefilter*> v;
 
   // Add the top level nodes of each regexp prefilter.
   for (size_t i = 0; i < prefilter_vec_.size(); i++) {
@@ -139,7 +135,7 @@ void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
     if (f == NULL)
       continue;
     if (f->op() == Prefilter::AND || f->op() == Prefilter::OR) {
-      const std::vector<Prefilter*>& subs = *f->subs();
+      const re2::Vector<Prefilter*>& subs = *f->subs();
       for (size_t j = 0; j < subs.size(); j++)
         v.push_back(subs[j]);
     }
@@ -178,7 +174,7 @@ void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
     int id = prefilter->unique_id();
     switch (prefilter->op()) {
       default:
-        ABSL_LOG(DFATAL) << "Unexpected op: " << prefilter->op();
+        RE2_LOG(DFATAL) << "Unexpected op: " << prefilter->op();
         return;
 
       case Prefilter::ATOM:
@@ -194,7 +190,7 @@ void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
         int up_count = 0;
         for (size_t j = 0; j < prefilter->subs()->size(); j++) {
           int child_id = (*prefilter->subs())[j]->unique_id();
-          std::vector<int>& parents = entries_[child_id].parents;
+          re2::Vector<int>& parents = entries_[child_id].parents;
           if (parents.empty() || parents.back() != id) {
             parents.push_back(id);
             up_count++;
@@ -212,7 +208,7 @@ void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
     if (prefilter_vec_[i] == NULL)
       continue;
     int id = CanonicalNode(nodes, prefilter_vec_[i])->unique_id();
-    ABSL_DCHECK_LE(0, id);
+    RE2_DCHECK_LE(0, id);
     Entry* entry = &entries_[id];
     entry->regexps.push_back(static_cast<int>(i));
   }
@@ -222,7 +218,7 @@ void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
   // We use logarithms below to avoid the likelihood of underflow.
   double log_num_regexps = std::log(prefilter_vec_.size() - unfiltered_.size());
   // Hoisted this above the loop so that we don't thrash the heap.
-  std::vector<std::pair<size_t, int>> entries_by_num_edges;
+  re2::Vector<std::pair<size_t, int>> entries_by_num_edges;
   for (int i = static_cast<int>(v.size()) - 1; i >= 0; i--) {
     Prefilter* prefilter = v[i];
     // Pruning applies only to AND nodes because it "just" reduces
@@ -237,7 +233,7 @@ void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
     entries_by_num_edges.clear();
     for (size_t j = 0; j < prefilter->subs()->size(); j++) {
       int child_id = (*prefilter->subs())[j]->unique_id();
-      const std::vector<int>& parents = entries_[child_id].parents;
+      const re2::Vector<int>& parents = entries_[child_id].parents;
       entries_by_num_edges.emplace_back(parents.size(), child_id);
     }
     std::stable_sort(entries_by_num_edges.begin(), entries_by_num_edges.end());
@@ -249,7 +245,7 @@ void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
     double log_num_triggered = log_num_regexps;
     for (const auto& pair : entries_by_num_edges) {
       int child_id = pair.second;
-      std::vector<int>& parents = entries_[child_id].parents;
+      re2::Vector<int>& parents = entries_[child_id].parents;
       if (log_num_triggered > 0.) {
         log_num_triggered += std::log(parents.size());
         log_num_triggered -= log_num_regexps;
@@ -266,8 +262,8 @@ void PrefilterTree::AssignUniqueIds(NodeSet* nodes,
 
 // Functions for triggering during search.
 void PrefilterTree::RegexpsGivenStrings(
-    const std::vector<int>& matched_atoms,
-    std::vector<int>* regexps) const {
+    const re2::Vector<int>& matched_atoms,
+    re2::Vector<int>* regexps) const {
   regexps->clear();
   if (!compiled_) {
     // Some legacy users of PrefilterTree call Compile() before
@@ -277,12 +273,12 @@ void PrefilterTree::RegexpsGivenStrings(
       return;
     }
 
-    ABSL_LOG(ERROR) << "RegexpsGivenStrings called before Compile.";
+    RE2_LOG(ERROR) << "RegexpsGivenStrings called before Compile.";
     for (size_t i = 0; i < prefilter_vec_.size(); i++)
       regexps->push_back(static_cast<int>(i));
   } else {
     IntMap regexps_map(static_cast<int>(prefilter_vec_.size()));
-    std::vector<int> matched_atom_ids;
+    re2::Vector<int> matched_atom_ids;
     for (size_t j = 0; j < matched_atoms.size(); j++)
       matched_atom_ids.push_back(atom_index_to_id_[matched_atoms[j]]);
     PropagateMatch(matched_atom_ids, &regexps_map);
@@ -291,12 +287,12 @@ void PrefilterTree::RegexpsGivenStrings(
          ++it)
       regexps->push_back(it->index());
 
-    regexps->insert(regexps->end(), unfiltered_.begin(), unfiltered_.end());
+    for (int id : unfiltered_) regexps->push_back(id);
   }
   std::sort(regexps->begin(), regexps->end());
 }
 
-void PrefilterTree::PropagateMatch(const std::vector<int>& atom_ids,
+void PrefilterTree::PropagateMatch(const re2::Vector<int>& atom_ids,
                                    IntMap* regexps) const {
   IntMap count(static_cast<int>(entries_.size()));
   IntMap work(static_cast<int>(entries_.size()));
@@ -331,31 +327,31 @@ void PrefilterTree::PropagateMatch(const std::vector<int>& atom_ids,
 
 // Debugging help.
 void PrefilterTree::PrintPrefilter(int regexpid) {
-  ABSL_LOG(ERROR) << DebugNodeString(prefilter_vec_[regexpid]);
+  RE2_LOG(ERROR) << DebugNodeString(prefilter_vec_[regexpid]);
 }
 
 void PrefilterTree::PrintDebugInfo(NodeSet* nodes) {
-  ABSL_LOG(ERROR) << "#Unique Atoms: " << atom_index_to_id_.size();
-  ABSL_LOG(ERROR) << "#Unique Nodes: " << entries_.size();
+  RE2_LOG(ERROR) << "#Unique Atoms: " << atom_index_to_id_.size();
+  RE2_LOG(ERROR) << "#Unique Nodes: " << entries_.size();
 
   for (size_t i = 0; i < entries_.size(); i++) {
-    const std::vector<int>& parents = entries_[i].parents;
-    const std::vector<int>& regexps = entries_[i].regexps;
-    ABSL_LOG(ERROR) << "EntryId: " << i
+    const re2::Vector<int>& parents = entries_[i].parents;
+    const re2::Vector<int>& regexps = entries_[i].regexps;
+    RE2_LOG(ERROR) << "EntryId: " << i
                     << " N: " << parents.size() << " R: " << regexps.size();
     for (int parent : parents)
-      ABSL_LOG(ERROR) << parent;
+      RE2_LOG(ERROR) << parent;
   }
-  ABSL_LOG(ERROR) << "Set:";
+  RE2_LOG(ERROR) << "Set:";
   for (NodeSet::const_iterator iter = nodes->begin();
        iter != nodes->end(); ++iter)
-    ABSL_LOG(ERROR) << "NodeId: " << (*iter)->unique_id();
+    RE2_LOG(ERROR) << "NodeId: " << (*iter)->unique_id();
 }
 
-std::string PrefilterTree::DebugNodeString(Prefilter* node) const {
-  std::string node_string = "";
+re2::String PrefilterTree::DebugNodeString(Prefilter* node) const {
+  re2::String node_string = "";
   if (node->op() == Prefilter::ATOM) {
-    ABSL_DCHECK(!node->atom().empty());
+    RE2_DCHECK(!node->atom().empty());
     node_string += node->atom();
   } else {
     // Adding the operation disambiguates AND and OR nodes.
@@ -364,7 +360,7 @@ std::string PrefilterTree::DebugNodeString(Prefilter* node) const {
     for (size_t i = 0; i < node->subs()->size(); i++) {
       if (i > 0)
         node_string += ',';
-      node_string += absl::StrFormat("%d", (*node->subs())[i]->unique_id());
+      node_string += re2::internal::StrFormat("%d", (*node->subs())[i]->unique_id());
       node_string += ":";
       node_string += DebugNodeString((*node->subs())[i]);
     }

@@ -50,10 +50,10 @@
 // supplied pattern exactly.
 //
 // Example: successful match
-//    ABSL_CHECK(RE2::FullMatch("hello", "h.*o"));
+//    RE2_CHECK(RE2::FullMatch("hello", "h.*o"));
 //
 // Example: unsuccessful match (requires full match):
-//    ABSL_CHECK(!RE2::FullMatch("hello", "e"));
+//    RE2_CHECK(!RE2::FullMatch("hello", "e"));
 //
 // -----------------------------------------------------------------------
 // UTF-8 AND THE MATCHING INTERFACE:
@@ -62,8 +62,8 @@
 // The RE2::Latin1 option causes them to be interpreted as Latin-1.
 //
 // Example:
-//    ABSL_CHECK(RE2::FullMatch(utf8_string, RE2(utf8_pattern)));
-//    ABSL_CHECK(RE2::FullMatch(latin1_string, RE2(latin1_pattern,
+//    RE2_CHECK(RE2::FullMatch(utf8_string, RE2(utf8_pattern)));
+//    RE2_CHECK(RE2::FullMatch(latin1_string, RE2(latin1_pattern,
 //                                                 RE2::Latin1)));
 //
 // -----------------------------------------------------------------------
@@ -83,28 +83,28 @@
 //
 // Example: extracts "ruby" into "s" and 1234 into "i"
 //    int i;
-//    std::string s;
-//    ABSL_CHECK(RE2::FullMatch("ruby:1234", "(\\w+):(\\d+)", &s, &i));
+//    re2::String s;
+//    RE2_CHECK(RE2::FullMatch("ruby:1234", "(\\w+):(\\d+)", &s, &i));
 //
 // Example: extracts "ruby" into "s" and no value into "i"
 //    std::optional<int> i;
-//    std::string s;
-//    ABSL_CHECK(RE2::FullMatch("ruby", "(\\w+)(?::(\\d+))?", &s, &i));
+//    re2::String s;
+//    RE2_CHECK(RE2::FullMatch("ruby", "(\\w+)(?::(\\d+))?", &s, &i));
 //
 // Example: fails because string cannot be stored in integer
-//    ABSL_CHECK(!RE2::FullMatch("ruby", "(.*)", &i));
+//    RE2_CHECK(!RE2::FullMatch("ruby", "(.*)", &i));
 //
 // Example: fails because there aren't enough sub-patterns
-//    ABSL_CHECK(!RE2::FullMatch("ruby:1234", "\\w+:\\d+", &s));
+//    RE2_CHECK(!RE2::FullMatch("ruby:1234", "\\w+:\\d+", &s));
 //
 // Example: does not try to extract any extra sub-patterns
-//    ABSL_CHECK(RE2::FullMatch("ruby:1234", "(\\w+):(\\d+)", &s));
+//    RE2_CHECK(RE2::FullMatch("ruby:1234", "(\\w+):(\\d+)", &s));
 //
 // Example: does not try to extract into NULL
-//    ABSL_CHECK(RE2::FullMatch("ruby:1234", "(\\w+):(\\d+)", NULL, &i));
+//    RE2_CHECK(RE2::FullMatch("ruby:1234", "(\\w+):(\\d+)", NULL, &i));
 //
 // Example: integer overflow causes failure
-//    ABSL_CHECK(!RE2::FullMatch("ruby:1234567891234", "\\w+:(\\d+)", &i));
+//    RE2_CHECK(!RE2::FullMatch("ruby:1234567891234", "\\w+:(\\d+)", &i));
 //
 // NOTE(rsc): Asking for submatches slows successful matches quite a bit.
 // This may get a little faster in the future, but right now is slower
@@ -118,12 +118,12 @@
 // to match any substring of the text.
 //
 // Example: simple search for a string:
-//      ABSL_CHECK(RE2::PartialMatch("hello", "ell"));
+//      RE2_CHECK(RE2::PartialMatch("hello", "ell"));
 //
 // Example: find first number in a string
 //      int number;
-//      ABSL_CHECK(RE2::PartialMatch("x*100 + 20", "(\\d+)", &number));
-//      ABSL_CHECK_EQ(number, 100);
+//      RE2_CHECK(RE2::PartialMatch("x*100 + 20", "(\\d+)", &number));
+//      RE2_CHECK_EQ(number, 100);
 //
 // -----------------------------------------------------------------------
 // PRE-COMPILED REGULAR EXPRESSIONS
@@ -150,10 +150,10 @@
 // which represents a sub-range of a real string.
 //
 // Example: read lines of the form "var = value" from a string.
-//      std::string contents = ...;         // Fill string somehow
-//      absl::string_view input(contents);  // Wrap a string_view around it
+//      re2::String contents = ...;         // Fill string somehow
+//      re2::StringView input(contents);  // Wrap a string_view around it
 //
-//      std::string var;
+//      re2::String var;
 //      int value;
 //      while (RE2::Consume(&input, "(\\w+) = (\\d+)\n", &var, &value)) {
 //        ...;
@@ -204,7 +204,7 @@
 //
 // Example:
 //   int a, b, c, d;
-//   ABSL_CHECK(RE2::FullMatch("100 40 0100 0x40", "(.*) (.*) (.*) (.*)",
+//   RE2_CHECK(RE2::FullMatch("100 40 0100 0x40", "(.*) (.*) (.*) (.*)",
 //         RE2::Octal(&a), RE2::Hex(&b), RE2::CRadix(&c), RE2::CRadix(&d));
 // will leave 64 in a, b, c, and d.
 
@@ -212,14 +212,10 @@
 #include <stdint.h>
 
 #include <algorithm>
-#include <map>
 #include <optional>
-#include <string>
 #include <type_traits>
-#include <vector>
 
-#include "absl/base/call_once.h"
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/stringpiece.h"
 
 #if defined(__APPLE__)
@@ -280,13 +276,13 @@ class RE2 {
     Quiet // do not log about regexp parse errors
   };
 
-  // Need to have the const char* and const std::string& forms for implicit
+  // Need to have the const char* and const re2::String& forms for implicit
   // conversions when passing string literals to FullMatch and PartialMatch.
-  // Otherwise the absl::string_view form would be sufficient.
+  // Otherwise the re2::StringView form would be sufficient.
   RE2(const char* pattern);
-  RE2(const std::string& pattern);
-  RE2(absl::string_view pattern);
-  RE2(absl::string_view pattern, const Options& options);
+  RE2(const re2::String& pattern);
+  RE2(re2::StringView pattern);
+  RE2(re2::StringView pattern, const Options& options);
   ~RE2();
 
   // Not copyable.
@@ -309,11 +305,11 @@ class RE2 {
   // The string specification for this RE2.  E.g.
   //   RE2 re("ab*c?d+");
   //   re.pattern();    // "ab*c?d+"
-  const std::string& pattern() const { return *pattern_; }
+  const re2::String& pattern() const { return *pattern_; }
 
   // If RE2 could not be created properly, returns an error string.
   // Else returns the empty string.
-  const std::string& error() const { return *error_; }
+  const re2::String& error() const { return *error_; }
 
   // If RE2 could not be created properly, returns an error code.
   // Else returns RE2::NoError (== 0).
@@ -321,7 +317,7 @@ class RE2 {
 
   // If RE2 could not be created properly, returns the offending
   // portion of the regexp.
-  const std::string& error_arg() const { return *error_arg_; }
+  const re2::String& error_arg() const { return *error_arg_; }
 
   // Returns the program size, a very approximate measure of a regexp's "cost".
   // Larger numbers are more expensive than smaller numbers.
@@ -331,8 +327,8 @@ class RE2 {
   // If histogram is not null, outputs the program fanout
   // as a histogram bucketed by powers of 2.
   // Returns the number of the largest non-empty bucket.
-  int ProgramFanout(std::vector<int>* histogram) const;
-  int ReverseProgramFanout(std::vector<int>* histogram) const;
+  int ProgramFanout(re2::Vector<int>* histogram) const;
+  int ReverseProgramFanout(re2::Vector<int>* histogram) const;
 
   // Returns the underlying Regexp; not for general use.
   // Returns entire_regexp_ so that callers don't need
@@ -345,13 +341,13 @@ class RE2 {
   // the functions whose names are the prefix before the 'N'. It is sometimes
   // useful to invoke them directly, but the syntax is awkward, so the 'N'-less
   // versions should be preferred.
-  static bool FullMatchN(absl::string_view text, const RE2& re,
+  static bool FullMatchN(re2::StringView text, const RE2& re,
                          const Arg* const args[], int n);
-  static bool PartialMatchN(absl::string_view text, const RE2& re,
+  static bool PartialMatchN(re2::StringView text, const RE2& re,
                             const Arg* const args[], int n);
-  static bool ConsumeN(absl::string_view* input, const RE2& re,
+  static bool ConsumeN(re2::StringView* input, const RE2& re,
                        const Arg* const args[], int n);
-  static bool FindAndConsumeN(absl::string_view* input, const RE2& re,
+  static bool FindAndConsumeN(re2::StringView* input, const RE2& re,
                               const Arg* const args[], int n);
 
  private:
@@ -378,13 +374,13 @@ class RE2 {
   // Matches "text" against "re".  If pointer arguments are
   // supplied, copies matched sub-patterns into them.
   //
-  // You can pass in a "const char*" or a "std::string" for "text".
-  // You can pass in a "const char*" or a "std::string" or a "RE2" for "re".
+  // You can pass in a "const char*" or a "re2::String" for "text".
+  // You can pass in a "const char*" or a "re2::String" or a "RE2" for "re".
   //
   // The provided pointer arguments can be pointers to any scalar numeric
   // type, or one of:
-  //    std::string        (matched piece is copied to string)
-  //    absl::string_view  (string_view is mutated to point to matched piece)
+  //    re2::String        (matched piece is copied to string)
+  //    re2::StringView  (string_view is mutated to point to matched piece)
   //    std::optional<T>  (T is a supported numeric or string type as above)
   //    T                  ("bool T::ParseFrom(const char*, size_t)" must exist)
   //    (void*)NULL        (the corresponding matched sub-pattern is not copied)
@@ -408,7 +404,7 @@ class RE2 {
   //
   // Use std::optional<int> instead to handle this case correctly.
   template <typename... A>
-  static bool FullMatch(absl::string_view text, const RE2& re, A&&... a) {
+  static bool FullMatch(re2::StringView text, const RE2& re, A&&... a) {
     return Apply(FullMatchN, text, re, Arg(std::forward<A>(a))...);
   }
 
@@ -424,7 +420,7 @@ class RE2 {
   //      number of sub-patterns, the "i"th captured sub-pattern is
   //      ignored.
   template <typename... A>
-  static bool PartialMatch(absl::string_view text, const RE2& re, A&&... a) {
+  static bool PartialMatch(re2::StringView text, const RE2& re, A&&... a) {
     return Apply(PartialMatchN, text, re, Arg(std::forward<A>(a))...);
   }
 
@@ -442,7 +438,7 @@ class RE2 {
   //      number of sub-patterns, the "i"th captured sub-pattern is
   //      ignored.
   template <typename... A>
-  static bool Consume(absl::string_view* input, const RE2& re, A&&... a) {
+  static bool Consume(re2::StringView* input, const RE2& re, A&&... a) {
     return Apply(ConsumeN, input, re, Arg(std::forward<A>(a))...);
   }
 
@@ -460,7 +456,7 @@ class RE2 {
   //      number of sub-patterns, the "i"th captured sub-pattern is
   //      ignored.
   template <typename... A>
-  static bool FindAndConsume(absl::string_view* input, const RE2& re, A&&... a) {
+  static bool FindAndConsume(re2::StringView* input, const RE2& re, A&&... a) {
     return Apply(FindAndConsumeN, input, re, Arg(std::forward<A>(a))...);
   }
 
@@ -470,22 +466,22 @@ class RE2 {
   // from the pattern.  \0 in "rewrite" refers to the entire matching
   // text.  E.g.,
   //
-  //   std::string s = "yabba dabba doo";
-  //   ABSL_CHECK(RE2::Replace(&s, "b+", "d"));
+  //   re2::String s = "yabba dabba doo";
+  //   RE2_CHECK(RE2::Replace(&s, "b+", "d"));
   //
   // will leave "s" containing "yada dabba doo"
   //
   // Returns true if the pattern matches and a replacement occurs,
   // false otherwise.
-  static bool Replace(std::string* str,
+  static bool Replace(re2::String* str,
                       const RE2& re,
-                      absl::string_view rewrite);
+                      re2::StringView rewrite);
 
   // Like Replace(), except replaces successive non-overlapping occurrences
   // of the pattern in the string with the rewrite. E.g.
   //
-  //   std::string s = "yabba dabba doo";
-  //   ABSL_CHECK(RE2::GlobalReplace(&s, "b+", "d"));
+  //   re2::String s = "yabba dabba doo";
+  //   RE2_CHECK(RE2::GlobalReplace(&s, "b+", "d"));
   //
   // will leave "s" containing "yada dada doo"
   // Replacements are not subject to re-matching.
@@ -494,9 +490,9 @@ class RE2 {
   // replacing "ana" within "banana" makes only one replacement, not two.
   //
   // Returns the number of replacements made.
-  static int GlobalReplace(std::string* str,
+  static int GlobalReplace(re2::String* str,
                            const RE2& re,
-                           absl::string_view rewrite);
+                           re2::StringView rewrite);
 
   // Like Replace, except that if the pattern matches, "rewrite"
   // is copied into "out" with substitutions.  The non-matching
@@ -506,10 +502,10 @@ class RE2 {
   // successfully;  if no match occurs, the string is left unaffected.
   //
   // REQUIRES: "text" must not alias any part of "*out".
-  static bool Extract(absl::string_view text,
+  static bool Extract(re2::StringView text,
                       const RE2& re,
-                      absl::string_view rewrite,
-                      std::string* out);
+                      re2::StringView rewrite,
+                      re2::String* out);
 
   // Escapes all potentially meaningful regexp characters in
   // 'unquoted'.  The returned string, used as a regular expression,
@@ -517,7 +513,7 @@ class RE2 {
   //           1.5-2.0?
   // may become:
   //           1\.5\-2\.0\?
-  static std::string QuoteMeta(absl::string_view unquoted);
+  static re2::String QuoteMeta(re2::StringView unquoted);
 
   // Computes range for any strings matching regexp. The min and max can in
   // some cases be arbitrarily precise, so the caller gets to specify the
@@ -533,7 +529,7 @@ class RE2 {
   // do not compile down to infinite repetitions.
   //
   // Returns true on success, false on error.
-  bool PossibleMatchRange(std::string* min, std::string* max,
+  bool PossibleMatchRange(re2::String* min, re2::String* max,
                           int maxlen) const;
 
   // Generic matching interface
@@ -554,12 +550,12 @@ class RE2 {
   // The map records the index of the leftmost group
   // with the given name.
   // Only valid until the re is deleted.
-  const std::map<std::string, int>& NamedCapturingGroups() const;
+  const re2::Map<re2::String, int>& NamedCapturingGroups() const;
 
   // Return a map from capturing indices to names.
   // The map has no entries for unnamed groups.
   // Only valid until the re is deleted.
-  const std::map<int, std::string>& CapturingGroupNames() const;
+  const re2::Map<int, re2::String>& CapturingGroupNames() const;
 
   // General matching routine.
   // Match against text starting at offset startpos
@@ -578,15 +574,15 @@ class RE2 {
   // Doesn't make sense to use nsubmatch > 1 + NumberOfCapturingGroups(),
   // but will be handled correctly.
   //
-  // Passing text == absl::string_view() will be handled like any other
+  // Passing text == re2::StringView() will be handled like any other
   // empty string, but note that on return, it will not be possible to tell
   // whether submatch i matched the empty string or did not match:
   // either way, submatch[i].data() == NULL.
-  bool Match(absl::string_view text,
+  bool Match(re2::StringView text,
              size_t startpos,
              size_t endpos,
              Anchor re_anchor,
-             absl::string_view* submatch,
+             re2::StringView* submatch,
              int nsubmatch) const;
 
   // Check that the given rewrite string is suitable for use with this
@@ -597,21 +593,21 @@ class RE2 {
   //     '\' followed by anything other than a digit or '\'.
   // A true return value guarantees that Replace() and Extract() won't
   // fail because of a bad rewrite string.
-  bool CheckRewriteString(absl::string_view rewrite,
-                          std::string* error) const;
+  bool CheckRewriteString(re2::StringView rewrite,
+                          re2::String* error) const;
 
   // Returns the maximum submatch needed for the rewrite to be done by
   // Replace(). E.g. if rewrite == "foo \\2,\\1", returns 2.
-  static int MaxSubmatch(absl::string_view rewrite);
+  static int MaxSubmatch(re2::StringView rewrite);
 
   // Append the "rewrite" string, with backslash substitutions from "vec",
   // to string "out".
   // Returns true on success.  This method can fail because of a malformed
   // rewrite string.  CheckRewriteString guarantees that the rewrite will
   // be sucessful.
-  bool Rewrite(std::string* out,
-               absl::string_view rewrite,
-               const absl::string_view* vec,
+  bool Rewrite(re2::String* out,
+               re2::StringView rewrite,
+               const re2::StringView* vec,
                int veclen) const;
 
   // Constructor options
@@ -770,9 +766,9 @@ class RE2 {
   static void FUZZING_ONLY_set_maximum_global_replace_count(int i);
 
  private:
-  void Init(absl::string_view pattern, const Options& options);
+  void Init(re2::StringView pattern, const Options& options);
 
-  bool DoMatch(absl::string_view text,
+  bool DoMatch(re2::StringView text,
                Anchor re_anchor,
                size_t* consumed,
                const Arg* const args[],
@@ -781,12 +777,12 @@ class RE2 {
   re2::Prog* ReverseProg() const;
 
   // First cache line is relatively cold fields.
-  const std::string* pattern_;    // string regular expression
+  const re2::String* pattern_;    // string regular expression
   Options options_;               // option flags
   re2::Regexp* entire_regexp_;    // parsed regular expression
   re2::Regexp* suffix_regexp_;    // parsed regular expression, prefix_ removed
-  const std::string* error_;      // error indicator (or points to empty string)
-  const std::string* error_arg_;  // fragment of regexp showing error (or ditto)
+  const re2::String* error_;      // error indicator (or points to empty string)
+  const re2::String* error_arg_;  // fragment of regexp showing error (or ditto)
 
   // Second cache line is relatively hot fields.
   // These are ordered oddly to pack everything.
@@ -795,19 +791,20 @@ class RE2 {
   bool longest_match_ : 1;        // cached copy of options_.longest_match()
   bool is_one_pass_ : 1;          // can use prog_->SearchOnePass?
   bool prefix_foldcase_ : 1;      // prefix_ is ASCII case-insensitive
-  std::string prefix_;            // required prefix (before suffix_regexp_)
+  re2::StringView prefix_view_;    // cached view avoids decoding smallstring in Match
+  re2::String prefix_;            // required prefix (before suffix_regexp_)
   re2::Prog* prog_;               // compiled program for regexp
 
   // Reverse Prog for DFA execution only
   mutable re2::Prog* rprog_;
   // Map from capture names to indices
-  mutable const std::map<std::string, int>* named_groups_;
+  mutable const re2::Map<re2::String, int>* named_groups_;
   // Map from capture indices to names
-  mutable const std::map<int, std::string>* group_names_;
+  mutable const re2::Map<int, re2::String>* group_names_;
 
-  mutable absl::once_flag rprog_once_;
-  mutable absl::once_flag named_groups_once_;
-  mutable absl::once_flag group_names_once_;
+  mutable re2::internal::once_flag rprog_once_;
+  mutable re2::internal::once_flag named_groups_once_;
+  mutable re2::internal::once_flag group_names_once_;
 };
 
 /***** Implementation details *****/
@@ -817,8 +814,8 @@ namespace re2_internal {
 // Types for which the 3-ary Parse() function template has specializations.
 template <typename T> struct Parse3ary : public std::false_type {};
 template <> struct Parse3ary<void> : public std::true_type {};
-template <> struct Parse3ary<std::string> : public std::true_type {};
-template <> struct Parse3ary<absl::string_view> : public std::true_type {};
+template <> struct Parse3ary<re2::String> : public std::true_type {};
+template <> struct Parse3ary<re2::StringView> : public std::true_type {};
 template <> struct Parse3ary<char> : public std::true_type {};
 template <> struct Parse3ary<signed char> : public std::true_type {};
 template <> struct Parse3ary<unsigned char> : public std::true_type {};
@@ -998,7 +995,7 @@ class LazyRE2 {
 
   // Named accessor/initializer:
   RE2* get() const {
-    absl::call_once(once_, &LazyRE2::Init, this);
+    re2::internal::call_once(once_, &LazyRE2::Init, this);
     return ptr_;
   }
 
@@ -1008,12 +1005,10 @@ class LazyRE2 {
   NoArg barrier_against_excess_initializers_;
 
   mutable RE2* ptr_;
-  mutable absl::once_flag once_;
+  mutable re2::internal::once_flag once_;
 
  private:
-  static void Init(const LazyRE2* lazy_re2) {
-    lazy_re2->ptr_ = new RE2(lazy_re2->pattern_, lazy_re2->options_);
-  }
+  static void Init(const LazyRE2* lazy_re2);
 
   void operator=(const LazyRE2&);  // disallowed
 };

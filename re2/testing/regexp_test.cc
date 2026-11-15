@@ -4,6 +4,7 @@
 
 // Test parse.cc, dump.cc, and tostring.cc.
 
+#include "re2/testing/support.h"
 #include "re2/regexp.h"
 
 #include <stddef.h>
@@ -33,13 +34,13 @@ TEST(Regexp, BigRef) {
 TEST(Regexp, BigConcat) {
   Regexp* x;
   x = Regexp::Parse("x", Regexp::NoParseFlags, NULL);
-  std::vector<Regexp*> v(90000, x);  // ToString bails out at 100000
+  re2::Vector<Regexp*> v(90000, x);  // ToString bails out at 100000
   for (size_t i = 0; i < v.size(); i++)
     x->Incref();
   ASSERT_EQ(x->Ref(), 1 + static_cast<int>(v.size())) << x->Ref();
   Regexp* re = Regexp::Concat(v.data(), static_cast<int>(v.size()),
                               Regexp::NoParseFlags);
-  ASSERT_EQ(re->ToString(), std::string(v.size(), 'x'));
+  ASSERT_EQ(re->ToString(), re2::String(v.size(), 'x'));
   re->Decref();
   ASSERT_EQ(x->Ref(), 1) << x->Ref();
   x->Decref();
@@ -52,11 +53,11 @@ TEST(Regexp, NamedCaptures) {
       "(?P<g1>a+)|(e)(?P<g2>w*)+(?P<g1>b+)", Regexp::PerlX, &status);
   EXPECT_TRUE(status.ok());
   EXPECT_EQ(4, x->NumCaptures());
-  const std::map<std::string, int>* have = x->NamedCaptures();
+  const re2::Map<re2::String, int>* have = x->NamedCaptures();
   EXPECT_TRUE(have != NULL);
   // there are only two named groups in the regexp: 'g1' and 'g2'.
   EXPECT_EQ(size_t{2}, have->size());
-  std::map<std::string, int> want;
+  re2::Map<re2::String, int> want;
   want["g1"] = 1;
   want["g2"] = 3;
   EXPECT_EQ(want, *have);
@@ -71,10 +72,10 @@ TEST(Regexp, CaptureNames) {
       "(?P<g1>a+)|(e)(?P<g2>w*)+(?P<g1>b+)", Regexp::PerlX, &status);
   EXPECT_TRUE(status.ok());
   EXPECT_EQ(4, x->NumCaptures());
-  const std::map<int, std::string>* have = x->CaptureNames();
+  const re2::Map<int, re2::String>* have = x->CaptureNames();
   EXPECT_TRUE(have != NULL);
   EXPECT_EQ(size_t{3}, have->size());
-  std::map<int, std::string> want;
+  re2::Map<int, re2::String> want;
   want[1] = "g1";
   want[3] = "g2";
   want[4] = "g1";

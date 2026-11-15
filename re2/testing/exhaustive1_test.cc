@@ -4,6 +4,7 @@
 
 // Exhaustive testing of regular expression matching.
 
+#include "re2/testing/support.h"
 #include <string>
 #include <vector>
 
@@ -15,7 +16,7 @@ namespace re2 {
 
 // Test simple repetition operators
 TEST(Repetition, Simple) {
-  std::vector<std::string> ops = Split(" ",
+  re2::Vector<re2::String> ops = Split(" ",
     "%s{0} %s{0,} %s{1} %s{1,} %s{0,1} %s{0,2} "
     "%s{1,2} %s{2} %s{2,} %s{3,4} %s{4,5} "
     "%s* %s+ %s? %s*? %s+? %s??");
@@ -27,7 +28,7 @@ TEST(Repetition, Simple) {
 
 // Test capturing parens -- (a) -- inside repetition operators
 TEST(Repetition, Capturing) {
-  std::vector<std::string> ops = Split(" ",
+  re2::Vector<re2::String> ops = Split(" ",
     "%s{0} %s{0,} %s{1} %s{1,} %s{0,1} %s{0,2} "
     "%s{1,2} %s{2} %s{2,} %s{3,4} %s{4,5} "
     "%s* %s+ %s? %s*? %s+? %s??");

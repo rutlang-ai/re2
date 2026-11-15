@@ -15,13 +15,12 @@
 #include <string>
 #include <vector>
 
-#include "absl/log/absl_check.h"
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 
 namespace re2 {
 
 StringGenerator::StringGenerator(int maxlen,
-                                 const std::vector<std::string>& alphabet)
+                                 const re2::Vector<re2::String>& alphabet)
     : maxlen_(maxlen), alphabet_(alphabet),
       generate_null_(false),
       random_(false), nrandom_(0) {
@@ -84,11 +83,11 @@ bool StringGenerator::RandomDigits() {
 // currently described by digits_.  Calls IncrementDigits
 // after computing the string, so that it knows the answer
 // for subsequent HasNext() calls.
-absl::string_view StringGenerator::Next() {
-  ABSL_CHECK(hasnext_);
+re2::StringView StringGenerator::Next() {
+  RE2_CHECK(hasnext_);
   if (generate_null_) {
     generate_null_ = false;
-    sp_ = absl::string_view();
+    sp_ = re2::StringView();
     return sp_;
   }
   s_.clear();
@@ -114,13 +113,13 @@ void StringGenerator::GenerateNULL() {
   hasnext_ = true;
 }
 
-std::string DeBruijnString(int n) {
-  ABSL_CHECK_GE(n, 1);
-  ABSL_CHECK_LE(n, 29);
+re2::String DeBruijnString(int n) {
+  RE2_CHECK_GE(n, 1);
+  RE2_CHECK_LE(n, 29);
   const size_t size = size_t{1} << static_cast<size_t>(n);
   const size_t mask = size - 1;
-  std::vector<bool> did(size, false);
-  std::string s;
+  re2::Vector<bool> did(size, false);
+  re2::String s;
   s.reserve(static_cast<size_t>(n) + size);
   for (size_t i = 0; i < static_cast<size_t>(n - 1); i++)
     s += '0';
@@ -134,10 +133,10 @@ std::string DeBruijnString(int n) {
     } else {
       s += '0';
     }
-    ABSL_CHECK(!did[bits]);
+    RE2_CHECK(!did[bits]);
     did[bits] = true;
   }
-  ABSL_CHECK_EQ(s.size(), static_cast<size_t>(n - 1) + size);
+  RE2_CHECK_EQ(s.size(), static_cast<size_t>(n - 1) + size);
   return s;
 }
 

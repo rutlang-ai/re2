@@ -5,13 +5,13 @@
 #ifndef RE2_STRINGPIECE_H_
 #define RE2_STRINGPIECE_H_
 
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 
 namespace re2 {
 
-// Until RE2 requires C++17 and uses std::string_view, allow users to
+// Until RE2 requires C++17 and uses re2::StringView, allow users to
 // continue to #include "re2/stringpiece.h" and use re2::StringPiece.
-using StringPiece = absl::string_view;
+using StringPiece = re2::StringView;
 
 }  // namespace re2
 
