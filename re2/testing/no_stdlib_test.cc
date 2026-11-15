@@ -119,7 +119,21 @@ static int CheckViewReplaceOffsets() {
   return 0;
 }
 
+static int CheckAliasedVectorResize() {
+  for (size_t initial : {size_t(1), size_t(2), size_t(8)}) {
+    re2::Vector<int> values(initial, 42);
+    values.resize(100, values[initial - 1]);
+    VERIFY(values.size() == 100);
+    for (int value : values) VERIFY(value == 42);
+    re2::Vector<re2::String> strings(initial, re2::String(100, 'x'));
+    strings.resize(100, strings[0]);
+    for (const auto& value : strings) VERIFY(value == re2::String(100, 'x'));
+  }
+  return 0;
+}
+
 int main() {
+  VERIFY(CheckAliasedVectorResize() == 0);
   VERIFY(CheckStringCharacterFind() == 0);
   VERIFY(CheckAliasedAppend() == 0);
   VERIFY(CheckAliasedInsert() == 0);
