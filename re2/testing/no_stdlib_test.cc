@@ -150,7 +150,24 @@ static int CheckAliasedVectorInsert() {
   return 0;
 }
 
+static int CheckAliasedVectorAssign() {
+  for (size_t initial : {size_t(1), size_t(2), size_t(8)}) {
+    for (size_t count : {size_t(0), size_t(1), size_t(8), size_t(100)}) {
+      re2::Vector<re2::String> values(initial, re2::String(100, 'x'));
+      values.assign(count, values[initial - 1]);
+      VERIFY(values.size() == count);
+      for (const auto& value : values) VERIFY(value == re2::String(100, 'x'));
+      re2::Vector<int> ints(initial, 42);
+      ints.assign(count, ints[0]);
+      VERIFY(ints.size() == count);
+      for (int value : ints) VERIFY(value == 42);
+    }
+  }
+  return 0;
+}
+
 int main() {
+  VERIFY(CheckAliasedVectorAssign() == 0);
   VERIFY(CheckAliasedVectorInsert() == 0);
   VERIFY(CheckAliasedVectorResize() == 0);
   VERIFY(CheckStringCharacterFind() == 0);
