@@ -222,7 +222,25 @@ static int CheckAliasedStringIteratorAssign() {
   return 0;
 }
 
+static int CheckAliasedStringIteratorReplace() {
+  for (size_t length : {size_t(6), size_t(100), size_t(16384)}) {
+    re2::String original(length, 'x');
+    for (size_t i = 0; i < length; ++i) original[i] = static_cast<char>('a' + i % 23);
+    re2::String value = original;
+    value.replace(value.begin(), value.end(), value.rbegin(), value.rend());
+    VERIFY(value.size() == length);
+    for (size_t i = 0; i < length; ++i) VERIFY(value[i] == original[length - i - 1]);
+    value = original;
+    value.replace(value.begin() + 1, value.end() - 1,
+                  value.rbegin(), value.rend() - 2);
+    VERIFY(value[0] == original[0] && value[length - 1] == original[length - 1]);
+    for (size_t i = 1; i < length - 1; ++i) VERIFY(value[i] == original[length - i]);
+  }
+  return 0;
+}
+
 int main() {
+  VERIFY(CheckAliasedStringIteratorReplace() == 0);
   VERIFY(CheckAliasedStringIteratorAssign() == 0);
   VERIFY(CheckSinglePassStringConstruction() == 0);
   VERIFY(CheckAliasedVectorAssign() == 0);
