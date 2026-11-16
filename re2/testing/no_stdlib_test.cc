@@ -201,7 +201,29 @@ static int CheckSinglePassStringConstruction() {
   return 0;
 }
 
+static int CheckAliasedStringIteratorAssign() {
+  for (size_t length : {size_t(6), size_t(100), size_t(16384)}) {
+    re2::String original(length, 'x');
+    for (size_t i = 0; i < length; ++i) original[i] = static_cast<char>('a' + i % 23);
+    re2::String value = original;
+    value.assign(value.rbegin(), value.rend());
+    VERIFY(value.size() == original.size());
+    for (size_t i = 0; i < length; ++i) VERIFY(value[i] == original[length - i - 1]);
+    value.assign(value.begin() + 1, value.end());
+    VERIFY(value.size() == length - 1);
+    for (size_t i = 0; i < value.size(); ++i) VERIFY(value[i] == original[length - i - 2]);
+  }
+  re2::String original("a\0bcdefgh", 9);
+  const char* cursor = original.data();
+  re2::String value("old");
+  value.assign(SinglePassChars{&cursor, original.data() + original.size(), false},
+               SinglePassChars{&cursor, original.data() + original.size(), true});
+  VERIFY(value == original);
+  return 0;
+}
+
 int main() {
+  VERIFY(CheckAliasedStringIteratorAssign() == 0);
   VERIFY(CheckSinglePassStringConstruction() == 0);
   VERIFY(CheckAliasedVectorAssign() == 0);
   VERIFY(CheckAliasedVectorInsert() == 0);
