@@ -10,7 +10,7 @@ Vendored header dependencies (no external downloads are needed to build RE2):
   [clapdb/Containa#68](https://github.com/clapdb/Containa/pull/68).
   The aliased assignment fill-value fix is included upstream via
   [clapdb/Containa#69](https://github.com/clapdb/Containa/pull/69).
-- SmallString: https://github.com/clapdb/smallstring at 2b2ae5d291184c946b9faa27d49e536d194fe5b9.
+- SmallString: https://github.com/clapdb/smallstring at ee4d1931f4ca7ea014eb35afc3aeb968afd8d028.
   Local changes replace throw paths with abort, constrain iterator overloads to non-integral
   types, check malloc failures, retain the inline-size invariant in Release, accelerate
   inline capture assignment and use the vendored fmt include path. The malloc-backed small_string is used.
@@ -23,7 +23,7 @@ Vendored header dependencies (no external downloads are needed to build RE2):
   [clapdb/smallstring#17](https://github.com/clapdb/smallstring/pull/17).
   The aliased iterator assignment fix is included upstream via
   [clapdb/smallstring#18](https://github.com/clapdb/smallstring/pull/18).
-  The aliased iterator replacement fix is applied locally and proposed upstream in
+  The aliased iterator replacement fix is included upstream via
   [clapdb/smallstring#19](https://github.com/clapdb/smallstring/pull/19).
 - fmt: https://github.com/fmtlib/fmt at 9908d00037d58233bcb1a7c99153bb96363994df.
   Only base.h, format.h and format-inl.h are needed by SmallString's formatter declarations.
