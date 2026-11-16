@@ -28,23 +28,10 @@
 
 #include <algorithm>
 #include <atomic>
-#include <deque>
 #include <memory>
-#include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/base/call_once.h"
-#include "absl/base/thread_annotations.h"
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/hash/hash.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
-#include "absl/synchronization/mutex.h"
-#include "absl/types/span.h"
+#include "re2/support.h"
 #include "re2/pod_array.h"
 #include "re2/prog.h"
 #include "re2/re2.h"
@@ -93,7 +80,7 @@ class DFA {
   //   returning the leftmost end of the match instead of the rightmost one.
   // If the DFA cannot complete the search (for example, if it is out of
   //   memory), it sets *failed and returns false.
-  bool Search(absl::string_view text, absl::string_view context, bool anchored,
+  bool Search(re2::StringView text, re2::StringView context, bool anchored,
               bool want_earliest_match, bool run_forward, bool* failed,
               const char** ep, SparseSet* matches);
 
@@ -105,7 +92,7 @@ class DFA {
 
   // Computes min and max for matching strings.  Won't return strings
   // bigger than maxlen.
-  bool PossibleMatchRange(std::string* min, std::string* max, int maxlen);
+  bool PossibleMatchRange(re2::String* min, re2::String* max, int maxlen);
 
   // These data structures are logically private, but C++ makes it too
   // difficult to mark them as such.
@@ -120,14 +107,14 @@ class DFA {
     inline bool IsMatch() const { return (flag_ & kFlagMatch) != 0; }
 
     template <typename H>
-    friend H AbslHashValue(H h, const State& a) {
-      const absl::Span<const int> ainst(a.inst_, a.ninst_);
+    friend H RE2HashValue(H h, const State& a) {
+      const re2::internal::Span<const int> ainst(a.inst_, a.ninst_);
       return H::combine(std::move(h), a.flag_, ainst);
     }
 
     friend bool operator==(const State& a, const State& b) {
-      const absl::Span<const int> ainst(a.inst_, a.ninst_);
-      const absl::Span<const int> binst(b.inst_, b.ninst_);
+      const re2::internal::Span<const int> ainst(a.inst_, a.ninst_);
+      const re2::internal::Span<const int> binst(b.inst_, b.ninst_);
       return &a == &b || (a.flag_ == b.flag_ && ainst == binst);
     }
 
@@ -152,24 +139,24 @@ class DFA {
 
   struct StateHash {
     size_t operator()(const State* a) const {
-      ABSL_DCHECK(a != NULL);
-      return absl::Hash<State>()(*a);
+      RE2_DCHECK(a != NULL);
+      return re2::internal::Hash<State>()(*a);
     }
   };
 
   struct StateEqual {
     bool operator()(const State* a, const State* b) const {
-      ABSL_DCHECK(a != NULL);
-      ABSL_DCHECK(b != NULL);
+      RE2_DCHECK(a != NULL);
+      RE2_DCHECK(b != NULL);
       return *a == *b;
     }
   };
 
-  typedef absl::flat_hash_set<State*, StateHash, StateEqual> StateSet;
+  typedef re2::internal::flat_hash_set<State*, StateHash, StateEqual> StateSet;
 
  private:
   // Make it easier to swap in a scalable reader-writer mutex.
-  using CacheMutex = absl::Mutex;
+  using CacheMutex = re2::internal::ReaderWriterMutex;
 
   enum {
     // Indices into start_ for unanchored searches.
@@ -228,14 +215,14 @@ class DFA {
   void AddToQueue(Workq* q, int id, uint32_t flag);
 
   // For debugging, returns a text representation of State.
-  static std::string DumpState(State* state);
+  static re2::String DumpState(State* state);
 
   // For debugging, returns a text representation of a Workq.
-  static std::string DumpWorkq(Workq* q);
+  static re2::String DumpWorkq(Workq* q);
 
   // Search parameters
   struct SearchParams {
-    SearchParams(absl::string_view text, absl::string_view context,
+    SearchParams(re2::StringView text, re2::StringView context,
                  RWLocker* cache_lock)
       : text(text),
         context(context),
@@ -249,8 +236,8 @@ class DFA {
         ep(NULL),
         matches(NULL) {}
 
-    absl::string_view text;
-    absl::string_view context;
+    re2::StringView text;
+    re2::StringView context;
     bool anchored;
     bool can_prefix_accel;
     bool want_earliest_match;
@@ -322,7 +309,7 @@ class DFA {
   Prog::MatchKind kind_;    // The kind of DFA.
   bool init_failed_;        // initialization failed (out of memory)
 
-  absl::Mutex mutex_;  // mutex_ >= cache_mutex_.r
+  re2::internal::Mutex mutex_;  // mutex_ >= cache_mutex_.r
 
   // Scratch areas, protected by mutex_.
   Workq* q0_;             // Two pre-allocated work queues.
@@ -425,7 +412,7 @@ DFA::DFA(Prog* prog, Prog::MatchKind kind, int64_t max_mem)
     q1_(NULL),
     mem_budget_(max_mem) {
   if (ExtraDebug)
-    absl::FPrintF(stderr, "\nkind %d\n%s\n", kind_, prog_->DumpUnanchored());
+    re2::internal::FPrintF(stderr, "\nkind %d\n%s\n", kind_, prog_->DumpUnanchored());
   int nmark = 0;
   if (kind_ == Prog::kLongestMatch)
     nmark = prog_->size();
@@ -487,15 +474,15 @@ DFA::~DFA() {
 // Debugging printouts
 
 // For debugging, returns a string representation of the work queue.
-std::string DFA::DumpWorkq(Workq* q) {
-  std::string s;
+re2::String DFA::DumpWorkq(Workq* q) {
+  re2::String s;
   const char* sep = "";
   for (Workq::iterator it = q->begin(); it != q->end(); ++it) {
     if (q->is_mark(*it)) {
       s += "|";
       sep = "";
     } else {
-      s += absl::StrFormat("%s%d", sep, *it);
+      s += re2::internal::StrFormat("%s%d", sep, *it);
       sep = ",";
     }
   }
@@ -503,16 +490,16 @@ std::string DFA::DumpWorkq(Workq* q) {
 }
 
 // For debugging, returns a string representation of the state.
-std::string DFA::DumpState(State* state) {
+re2::String DFA::DumpState(State* state) {
   if (state == NULL)
     return "_";
   if (state == DeadState)
     return "X";
   if (state == FullMatchState)
     return "*";
-  std::string s;
+  re2::String s;
   const char* sep = "";
-  s += absl::StrFormat("(%p)", state);
+  s += re2::internal::StrFormat("(%p)", state);
   for (int i = 0; i < state->ninst_; i++) {
     if (state->inst_[i] == Mark) {
       s += "|";
@@ -521,11 +508,11 @@ std::string DFA::DumpState(State* state) {
       s += "||";
       sep = "";
     } else {
-      s += absl::StrFormat("%s%d", sep, state->inst_[i]);
+      s += re2::internal::StrFormat("%s%d", sep, state->inst_[i]);
       sep = ",";
     }
   }
-  s += absl::StrFormat(" flag=%#x", state->flag_);
+  s += re2::internal::StrFormat(" flag=%#x", state->flag_);
   return s;
 }
 
@@ -621,7 +608,7 @@ DFA::State* DFA::WorkqToCachedState(Workq* q, Workq* mq, uint32_t flag) {
   bool sawmatch = false;   // whether queue contains guaranteed kInstMatch
   bool sawmark = false;    // whether queue contains a Mark
   if (ExtraDebug)
-    absl::FPrintF(stderr, "WorkqToCachedState %s [%#x]", DumpWorkq(q), flag);
+    re2::internal::FPrintF(stderr, "WorkqToCachedState %s [%#x]", DumpWorkq(q), flag);
   for (Workq::iterator it = q->begin(); it != q->end(); ++it) {
     int id = *it;
     if (sawmatch && (kind_ == Prog::kFirstMatch || q->is_mark(id)))
@@ -646,7 +633,7 @@ DFA::State* DFA::WorkqToCachedState(Workq* q, Workq* mq, uint32_t flag) {
             (kind_ != Prog::kLongestMatch || !sawmark) &&
             (flag & kFlagMatch)) {
           if (ExtraDebug)
-            absl::FPrintF(stderr, " -> FullMatchState\n");
+            re2::internal::FPrintF(stderr, " -> FullMatchState\n");
           return FullMatchState;
         }
         [[fallthrough]];
@@ -662,7 +649,7 @@ DFA::State* DFA::WorkqToCachedState(Workq* q, Workq* mq, uint32_t flag) {
         break;
     }
   }
-  ABSL_DCHECK_LE(n, q->size());
+  RE2_DCHECK_LE(n, q->size());
   if (n > 0 && inst[n-1] == Mark)
     n--;
 
@@ -692,7 +679,7 @@ DFA::State* DFA::WorkqToCachedState(Workq* q, Workq* mq, uint32_t flag) {
   // if the state is *not* a matching state.
   if (n == 0 && flag == 0) {
     if (ExtraDebug)
-      absl::FPrintF(stderr, " -> DeadState\n");
+      re2::internal::FPrintF(stderr, " -> DeadState\n");
     return DeadState;
   }
 
@@ -756,7 +743,7 @@ DFA::State* DFA::CachedState(int* inst, int ninst, uint32_t flag) {
   StateSet::iterator it = state_cache_.find(&state);
   if (it != state_cache_.end()) {
     if (ExtraDebug)
-      absl::FPrintF(stderr, " -cached-> %s\n", DumpState(*it));
+      re2::internal::FPrintF(stderr, " -cached-> %s\n", DumpState(*it));
     return *it;
   }
 
@@ -779,20 +766,20 @@ DFA::State* DFA::CachedState(int* inst, int ninst, uint32_t flag) {
   // inst_ is stored separately since it's colder; this also
   // means that the States for a given DFA are the same size
   // class, so the allocator can hopefully pack them better.
-  char* space = std::allocator<char>().allocate(mem);
+  char* space = re2::Allocator<char>().allocate(mem);
   State* s = new (space) State;
   (void) new (s->next_) std::atomic<State*>[nnext];
   // Work around a unfortunate bug in older versions of libstdc++.
   // (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=64658)
   for (int i = 0; i < nnext; i++)
     (void) new (s->next_ + i) std::atomic<State*>(NULL);
-  s->inst_ = std::allocator<int>().allocate(ninst);
+  s->inst_ = re2::Allocator<int>().allocate(ninst);
   (void) new (s->inst_) int[ninst];
   memmove(s->inst_, inst, instmem);
   s->ninst_ = ninst;
   s->flag_ = flag;
   if (ExtraDebug)
-    absl::FPrintF(stderr, " -> %s\n", DumpState(s));
+    re2::internal::FPrintF(stderr, " -> %s\n", DumpState(s));
 
   // Put state in cache and return it.
   state_cache_.insert(s);
@@ -807,12 +794,12 @@ void DFA::ClearCache() {
     StateSet::iterator tmp = begin;
     ++begin;
     // Deallocate the instruction array, which is stored separately as above.
-    std::allocator<int>().deallocate((*tmp)->inst_, (*tmp)->ninst_);
+    re2::Allocator<int>().deallocate((*tmp)->inst_, (*tmp)->ninst_);
     // Deallocate the blob of memory that we allocated in DFA::CachedState().
     // We recompute mem in order to benefit from sized delete where possible.
     int nnext = prog_->bytemap_range() + 1;  // + 1 for kByteEndText slot
     int mem = sizeof(State) + nnext*sizeof(std::atomic<State*>);
-    std::allocator<char>().deallocate(reinterpret_cast<char*>(*tmp), mem);
+    re2::Allocator<char>().deallocate(reinterpret_cast<char*>(*tmp), mem);
   }
   state_cache_.clear();
 }
@@ -850,7 +837,7 @@ void DFA::AddToQueue(Workq* q, int id, uint32_t flag) {
 
   stk[nstk++] = id;
   while (nstk > 0) {
-    ABSL_DCHECK_LE(nstk, stack_.size());
+    RE2_DCHECK_LE(nstk, stack_.size());
     id = stk[--nstk];
 
   Loop:
@@ -875,7 +862,7 @@ void DFA::AddToQueue(Workq* q, int id, uint32_t flag) {
     Prog::Inst* ip = prog_->inst(id);
     switch (ip->opcode()) {
       default:
-        ABSL_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
+        RE2_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
         break;
 
       case kInstByteRange:  // just save these on the queue
@@ -901,7 +888,7 @@ void DFA::AddToQueue(Workq* q, int id, uint32_t flag) {
         goto Loop;
 
       case kInstAltMatch:
-        ABSL_DCHECK(!ip->last());
+        RE2_DCHECK(!ip->last());
         id = id+1;
         goto Loop;
 
@@ -964,7 +951,7 @@ void DFA::RunWorkqOnByte(Workq* oldq, Workq* newq,
     Prog::Inst* ip = prog_->inst(id);
     switch (ip->opcode()) {
       default:
-        ABSL_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
+        RE2_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
         break;
 
       case kInstFail:        // never succeeds
@@ -1006,7 +993,7 @@ void DFA::RunWorkqOnByte(Workq* oldq, Workq* newq,
   }
 
   if (ExtraDebug)
-    absl::FPrintF(stderr, "%s on %d[%#x] -> %s [%d]\n",
+    re2::internal::FPrintF(stderr, "%s on %d[%#x] -> %s [%d]\n",
                   DumpWorkq(oldq), c, flag, DumpWorkq(newq), *ismatch);
 }
 
@@ -1015,7 +1002,7 @@ void DFA::RunWorkqOnByte(Workq* oldq, Workq* newq,
 DFA::State* DFA::RunStateOnByteUnlocked(State* state, int c) {
   // Keep only one RunStateOnByte going
   // even if the DFA is being run by multiple threads.
-  absl::MutexLock l(mutex_);
+  re2::internal::MutexLock l(mutex_);
   return RunStateOnByte(state, c);
 }
 
@@ -1032,14 +1019,14 @@ DFA::State* DFA::RunStateOnByte(State* state, int c) {
       return FullMatchState;
     }
     if (state == DeadState) {
-      ABSL_LOG(DFATAL) << "DeadState in RunStateOnByte";
+      RE2_LOG(DFATAL) << "DeadState in RunStateOnByte";
       return NULL;
     }
     if (state == NULL) {
-      ABSL_LOG(DFATAL) << "NULL state in RunStateOnByte";
+      RE2_LOG(DFATAL) << "NULL state in RunStateOnByte";
       return NULL;
     }
-    ABSL_LOG(DFATAL) << "Unexpected special state in RunStateOnByte";
+    RE2_LOG(DFATAL) << "Unexpected special state in RunStateOnByte";
     return NULL;
   }
 
@@ -1155,9 +1142,9 @@ DFA::RWLocker::RWLocker(CacheMutex* mu) : mu_(mu), writing_(false) {
   mu_->lock_shared();
 }
 
-// This function is marked as ABSL_NO_THREAD_SAFETY_ANALYSIS because
+// This function is marked as RE2_NO_THREAD_SAFETY_ANALYSIS because
 // the annotations don't support lock upgrade.
-void DFA::RWLocker::LockForWriting() ABSL_NO_THREAD_SAFETY_ANALYSIS {
+void DFA::RWLocker::LockForWriting() RE2_NO_THREAD_SAFETY_ANALYSIS {
   if (!writing_) {
     mu_->unlock_shared();
     mu_->lock();
@@ -1267,10 +1254,10 @@ DFA::StateSaver::~StateSaver() {
 DFA::State* DFA::StateSaver::Restore() {
   if (is_special_)
     return special_;
-  absl::MutexLock l(dfa_->mutex_);
+  re2::internal::MutexLock l(dfa_->mutex_);
   State* s = dfa_->CachedState(inst_, ninst_, flag_);
   if (s == NULL)
-    ABSL_LOG(DFATAL) << "StateSaver failed to restore state.";
+    RE2_LOG(DFATAL) << "StateSaver failed to restore state.";
   return s;
 }
 
@@ -1363,13 +1350,13 @@ inline bool DFA::InlinedSearchLoop(SearchParams* params) {
 
   State* s = start;
   if (ExtraDebug)
-    absl::FPrintF(stderr, "@stx: %s\n", DumpState(s));
+    re2::internal::FPrintF(stderr, "@stx: %s\n", DumpState(s));
 
   if (s->IsMatch()) {
     matched = true;
     lastmatch = p;
     if (ExtraDebug)
-      absl::FPrintF(stderr, "match @stx! [%s]\n", DumpState(s));
+      re2::internal::FPrintF(stderr, "match @stx! [%s]\n", DumpState(s));
     if (params->matches != NULL) {
       for (int i = s->ninst_ - 1; i >= 0; i--) {
         int id = s->inst_[i];
@@ -1386,7 +1373,7 @@ inline bool DFA::InlinedSearchLoop(SearchParams* params) {
 
   while (p != ep) {
     if (ExtraDebug)
-      absl::FPrintF(stderr, "@%d: %s\n", p - bp, DumpState(s));
+      re2::internal::FPrintF(stderr, "@%d: %s\n", p - bp, DumpState(s));
 
     if (can_prefix_accel && s == start) {
       // In start state, only way out is to find the prefix,
@@ -1454,13 +1441,13 @@ inline bool DFA::InlinedSearchLoop(SearchParams* params) {
         // Restore start and s so we can continue.
         if ((start = save_start.Restore()) == NULL ||
             (s = save_s.Restore()) == NULL) {
-          // Restore already did ABSL_LOG(DFATAL).
+          // Restore already did RE2_LOG(DFATAL).
           params->failed = true;
           return false;
         }
         ns = RunStateOnByteUnlocked(s, c);
         if (ns == NULL) {
-          ABSL_LOG(DFATAL) << "RunStateOnByteUnlocked failed after ResetCache";
+          RE2_LOG(DFATAL) << "RunStateOnByteUnlocked failed after ResetCache";
           params->failed = true;
           return false;
         }
@@ -1486,7 +1473,7 @@ inline bool DFA::InlinedSearchLoop(SearchParams* params) {
       else
         lastmatch = p + 1;
       if (ExtraDebug)
-        absl::FPrintF(stderr, "match @%d! [%s]\n", lastmatch - bp, DumpState(s));
+        re2::internal::FPrintF(stderr, "match @%d! [%s]\n", lastmatch - bp, DumpState(s));
       if (params->matches != NULL) {
         for (int i = s->ninst_ - 1; i >= 0; i--) {
           int id = s->inst_[i];
@@ -1505,7 +1492,7 @@ inline bool DFA::InlinedSearchLoop(SearchParams* params) {
   // Process one more byte to see if it triggers a match.
   // (Remember, matches are delayed one byte.)
   if (ExtraDebug)
-    absl::FPrintF(stderr, "@etx: %s\n", DumpState(s));
+    re2::internal::FPrintF(stderr, "@etx: %s\n", DumpState(s));
 
   int lastbyte;
   if (run_forward) {
@@ -1532,7 +1519,7 @@ inline bool DFA::InlinedSearchLoop(SearchParams* params) {
       }
       ns = RunStateOnByteUnlocked(s, lastbyte);
       if (ns == NULL) {
-        ABSL_LOG(DFATAL) << "RunStateOnByteUnlocked failed after Reset";
+        RE2_LOG(DFATAL) << "RunStateOnByteUnlocked failed after Reset";
         params->failed = true;
         return false;
       }
@@ -1553,7 +1540,7 @@ inline bool DFA::InlinedSearchLoop(SearchParams* params) {
     matched = true;
     lastmatch = p;
     if (ExtraDebug)
-      absl::FPrintF(stderr, "match @etx! [%s]\n", DumpState(s));
+      re2::internal::FPrintF(stderr, "match @etx! [%s]\n", DumpState(s));
     if (params->matches != NULL) {
       for (int i = s->ninst_ - 1; i >= 0; i--) {
         int id = s->inst_[i];
@@ -1644,12 +1631,12 @@ bool DFA::FastSearchLoop(SearchParams* params) {
 // state for the DFA search loop.  Fills in params and returns true on success.
 // Returns false on failure.
 bool DFA::AnalyzeSearch(SearchParams* params) {
-  absl::string_view text = params->text;
-  absl::string_view context = params->context;
+  re2::StringView text = params->text;
+  re2::StringView context = params->context;
 
   // Sanity check: make sure that text lies within context.
   if (BeginPtr(text) < BeginPtr(context) || EndPtr(text) > EndPtr(context)) {
-    ABSL_LOG(DFATAL) << "context does not contain text";
+    RE2_LOG(DFATAL) << "context does not contain text";
     params->start = DeadState;
     return true;
   }
@@ -1697,7 +1684,7 @@ bool DFA::AnalyzeSearch(SearchParams* params) {
     ResetCache(params->cache_lock);
     if (!AnalyzeSearchHelper(params, info, flags)) {
       params->failed = true;
-      ABSL_LOG(DFATAL) << "Failed to analyze start state.";
+      RE2_LOG(DFATAL) << "Failed to analyze start state.";
       return false;
     }
   }
@@ -1715,7 +1702,7 @@ bool DFA::AnalyzeSearch(SearchParams* params) {
     params->can_prefix_accel = true;
 
   if (ExtraDebug)
-    absl::FPrintF(stderr, "anchored=%d fwd=%d flags=%#x state=%s can_prefix_accel=%d\n",
+    re2::internal::FPrintF(stderr, "anchored=%d fwd=%d flags=%#x state=%s can_prefix_accel=%d\n",
                   params->anchored, params->run_forward, flags,
                   DumpState(params->start), params->can_prefix_accel);
 
@@ -1730,7 +1717,7 @@ bool DFA::AnalyzeSearchHelper(SearchParams* params, StartInfo* info,
   if (start != NULL)
     return true;
 
-  absl::MutexLock l(mutex_);
+  re2::internal::MutexLock l(mutex_);
   start = info->start.load(std::memory_order_relaxed);
   if (start != NULL)
     return true;
@@ -1749,7 +1736,7 @@ bool DFA::AnalyzeSearchHelper(SearchParams* params, StartInfo* info,
 }
 
 // The actual DFA search: calls AnalyzeSearch and then FastSearchLoop.
-bool DFA::Search(absl::string_view text, absl::string_view context,
+bool DFA::Search(re2::StringView text, re2::StringView context,
                  bool anchored, bool want_earliest_match, bool run_forward,
                  bool* failed, const char** epp, SparseSet* matches) {
   *epp = NULL;
@@ -1760,8 +1747,8 @@ bool DFA::Search(absl::string_view text, absl::string_view context,
   *failed = false;
 
   if (ExtraDebug) {
-    absl::FPrintF(stderr, "\nprogram:\n%s\n", prog_->DumpUnanchored());
-    absl::FPrintF(stderr, "text %s anchored=%d earliest=%d fwd=%d kind %d\n",
+    re2::internal::FPrintF(stderr, "\nprogram:\n%s\n", prog_->DumpUnanchored());
+    re2::internal::FPrintF(stderr, "text %s anchored=%d earliest=%d fwd=%d kind %d\n",
                   text, anchored, want_earliest_match, run_forward, kind_);
   }
 
@@ -1771,7 +1758,7 @@ bool DFA::Search(absl::string_view text, absl::string_view context,
   params.want_earliest_match = want_earliest_match;
   params.run_forward = run_forward;
   // matches should be null except when using RE2::Set.
-  ABSL_DCHECK(matches == NULL || kind_ == Prog::kManyMatch);
+  RE2_DCHECK(matches == NULL || kind_ == Prog::kManyMatch);
   params.matches = matches;
 
   if (!AnalyzeSearch(&params)) {
@@ -1788,7 +1775,7 @@ bool DFA::Search(absl::string_view text, absl::string_view context,
     return true;
   }
   if (ExtraDebug)
-    absl::FPrintF(stderr, "start %s\n", DumpState(params.start));
+    re2::internal::FPrintF(stderr, "start %s\n", DumpState(params.start));
   bool ret = FastSearchLoop(&params);
   if (params.failed) {
     *failed = true;
@@ -1807,17 +1794,17 @@ DFA* Prog::GetDFA(MatchKind kind) {
   // "longest match" DFA, because RE2 never does reverse
   // "first match" searches.
   if (kind == kFirstMatch) {
-    absl::call_once(dfa_first_once_, [](Prog* prog) {
+    re2::internal::call_once(dfa_first_once_, [](Prog* prog) {
       prog->dfa_first_ = new DFA(prog, kFirstMatch, prog->dfa_mem_ / 2);
     }, this);
     return dfa_first_;
   } else if (kind == kManyMatch) {
-    absl::call_once(dfa_first_once_, [](Prog* prog) {
+    re2::internal::call_once(dfa_first_once_, [](Prog* prog) {
       prog->dfa_first_ = new DFA(prog, kManyMatch, prog->dfa_mem_);
     }, this);
     return dfa_first_;
   } else {
-    absl::call_once(dfa_longest_once_, [](Prog* prog) {
+    re2::internal::call_once(dfa_longest_once_, [](Prog* prog) {
       if (!prog->reversed_)
         prog->dfa_longest_ = new DFA(prog, kLongestMatch, prog->dfa_mem_ / 2);
       else
@@ -1841,8 +1828,8 @@ void Prog::DeleteDFA(DFA* dfa) {
 //
 // This is the only external interface (class DFA only exists in this file).
 //
-bool Prog::SearchDFA(absl::string_view text, absl::string_view context,
-                     Anchor anchor, MatchKind kind, absl::string_view* match0,
+bool Prog::SearchDFA(re2::StringView text, re2::StringView context,
+                     Anchor anchor, MatchKind kind, re2::StringView* match0,
                      bool* failed, SparseSet* matches) {
   *failed = false;
 
@@ -1906,10 +1893,10 @@ bool Prog::SearchDFA(absl::string_view text, absl::string_view context,
   if (match0) {
     if (reversed_)
       *match0 =
-          absl::string_view(ep, static_cast<size_t>(text.data() + text.size() - ep));
+          re2::StringView(ep, static_cast<size_t>(text.data() + text.size() - ep));
     else
       *match0 =
-          absl::string_view(text.data(), static_cast<size_t>(ep - text.data()));
+          re2::StringView(text.data(), static_cast<size_t>(ep - text.data()));
   }
   return true;
 }
@@ -1922,7 +1909,7 @@ int DFA::BuildAllStates(const Prog::DFAStateCallback& cb) {
   // Pick out start state for unanchored search
   // at beginning of text.
   RWLocker l(&cache_mutex_);
-  SearchParams params(absl::string_view(), absl::string_view(), &l);
+  SearchParams params(re2::StringView(), re2::StringView(), &l);
   params.anchored = false;
   if (!AnalyzeSearch(&params) ||
       params.start == NULL ||
@@ -1932,14 +1919,14 @@ int DFA::BuildAllStates(const Prog::DFAStateCallback& cb) {
   // Add start state to work queue.
   // Note that any State* that we handle here must point into the cache,
   // so we can simply depend on pointer-as-a-number hashing and equality.
-  absl::flat_hash_map<State*, int> m;
-  std::deque<State*> q;
+  re2::internal::flat_hash_map<State*, int> m;
+  re2::internal::Deque<State*> q;
   m.emplace(params.start, static_cast<int>(m.size()));
   q.push_back(params.start);
 
   // Compute the input bytes needed to cover all of the next pointers.
   int nnext = prog_->bytemap_range() + 1;  // + 1 for kByteEndText slot
-  std::vector<int> input(nnext);
+  re2::Vector<int> input(nnext);
   for (int c = 0; c < 256; c++) {
     int b = prog_->bytemap()[c];
     while (c < 256-1 && prog_->bytemap()[c+1] == b)
@@ -1949,7 +1936,7 @@ int DFA::BuildAllStates(const Prog::DFAStateCallback& cb) {
   input[prog_->bytemap_range()] = kByteEndText;
 
   // Scratch space for the output.
-  std::vector<int> output(nnext);
+  re2::Vector<int> output(nnext);
 
   // Flood to expand every state.
   bool oom = false;
@@ -1989,7 +1976,7 @@ int Prog::BuildEntireDFA(MatchKind kind, const DFAStateCallback& cb) {
 
 // Computes min and max for matching string.
 // Won't return strings bigger than maxlen.
-bool DFA::PossibleMatchRange(std::string* min, std::string* max, int maxlen) {
+bool DFA::PossibleMatchRange(re2::String* min, re2::String* max, int maxlen) {
   if (!ok())
     return false;
 
@@ -2006,11 +1993,11 @@ bool DFA::PossibleMatchRange(std::string* min, std::string* max, int maxlen) {
   // Also note that previously_visited_states[UnseenStatePtr] will, in the STL
   // tradition, implicitly insert a '0' value at first use. We take advantage
   // of that property below.
-  absl::flat_hash_map<State*, int> previously_visited_states;
+  re2::internal::flat_hash_map<State*, int> previously_visited_states;
 
   // Pick out start state for anchored search at beginning of text.
   RWLocker l(&cache_mutex_);
-  SearchParams params(absl::string_view(), absl::string_view(), &l);
+  SearchParams params(re2::StringView(), re2::StringView(), &l);
   params.anchored = true;
   if (!AnalyzeSearch(&params))
     return false;
@@ -2050,7 +2037,7 @@ bool DFA::PossibleMatchRange(std::string* min, std::string* max, int maxlen) {
   // Build minimum prefix.
   State* s = params.start;
   min->clear();
-  absl::MutexLock lock(mutex_);
+  re2::internal::MutexLock lock(mutex_);
   for (int i = 0; i < maxlen; i++) {
     if (previously_visited_states[s] > kMaxEltRepetitions)
       break;
@@ -2126,7 +2113,7 @@ bool DFA::PossibleMatchRange(std::string* min, std::string* max, int maxlen) {
 }
 
 // PossibleMatchRange for a Prog.
-bool Prog::PossibleMatchRange(std::string* min, std::string* max, int maxlen) {
+bool Prog::PossibleMatchRange(re2::String* min, re2::String* max, int maxlen) {
   // Have to use dfa_longest_ to get all strings for full matches.
   // For example, (a|aa) never matches aa in first-match mode.
   return GetDFA(kLongestMatch)->PossibleMatchRange(min, max, maxlen);

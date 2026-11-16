@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/filtered_re2.h"
 #include "re2/re2.h"
 #include "re2/regexp.h"
@@ -97,8 +97,8 @@ class SubstringWalker : public re2::Regexp::Walker<int> {
   SubstringWalker& operator=(const SubstringWalker&) = delete;
 };
 
-void TestOneInput(absl::string_view pattern, const RE2::Options& options,
-                  RE2::Anchor anchor, absl::string_view text) {
+void TestOneInput(re2::StringView pattern, const RE2::Options& options,
+                  RE2::Anchor anchor, re2::StringView text) {
   // Crudely limit the use of ., \p, \P, \d, \D, \s, \S, \w and \W.
   // Otherwise, we will waste time on inputs that have long runs of various
   // character classes. The fuzzer has shown itself to be easily capable of
@@ -168,7 +168,7 @@ void TestOneInput(absl::string_view pattern, const RE2::Options& options,
 
   // Don't waste time fuzzing high-fanout programs.
   // They can cause bug reports due to fuzzer timeouts.
-  std::vector<int> histogram;
+  re2::Vector<int> histogram;
   int fanout = re.ProgramFanout(&histogram);
   if (fanout > 9)
     return;
@@ -178,7 +178,7 @@ void TestOneInput(absl::string_view pattern, const RE2::Options& options,
 
   if (re.NumberOfCapturingGroups() == 0) {
     // Avoid early return due to too many arguments.
-    absl::string_view sp = text;
+    re2::StringView sp = text;
     RE2::FullMatch(sp, re);
     RE2::PartialMatch(sp, re);
     RE2::Consume(&sp, re);
@@ -187,7 +187,7 @@ void TestOneInput(absl::string_view pattern, const RE2::Options& options,
   } else {
     // Okay, we have at least one capturing group...
     // Try conversion for variously typed arguments.
-    absl::string_view sp = text;
+    re2::StringView sp = text;
     short s;
     RE2::FullMatch(sp, re, &s);
     long l;
@@ -199,12 +199,12 @@ void TestOneInput(absl::string_view pattern, const RE2::Options& options,
     RE2::FindAndConsume(&sp, re, &d);
   }
 
-  std::string s = std::string(text);
+  re2::String s = re2::String(text);
   RE2::Replace(&s, re, "");
-  s = std::string(text);  // Reset.
+  s = re2::String(text);  // Reset.
   RE2::GlobalReplace(&s, re, "");
 
-  std::string min, max;
+  re2::String min, max;
   re.PossibleMatchRange(&min, &max, /*maxlen=*/9);
 
   // Exercise some other API functionality.
@@ -216,7 +216,7 @@ void TestOneInput(absl::string_view pattern, const RE2::Options& options,
   RE2::Set set(options, anchor);
   int index = set.Add(pattern, /*error=*/NULL);  // -1 on error
   if (index != -1 && set.Compile()) {
-    std::vector<int> matches;
+    re2::Vector<int> matches;
     set.Match(text, &matches);
   }
 
@@ -224,15 +224,15 @@ void TestOneInput(absl::string_view pattern, const RE2::Options& options,
   index = -1;  // not clobbered on error
   filter.Add(pattern, options, &index);
   if (index != -1) {
-    std::vector<std::string> atoms;
+    re2::Vector<re2::String> atoms;
     filter.Compile(&atoms);
     // Pretend that all atoms match, which
     // triggers the AND-OR tree maximally.
-    std::vector<int> matched_atoms;
+    re2::Vector<int> matched_atoms;
     matched_atoms.reserve(atoms.size());
     for (size_t i = 0; i < atoms.size(); ++i)
       matched_atoms.push_back(static_cast<int>(i));
-    std::vector<int> matches;
+    re2::Vector<int> matches;
     filter.AllMatches(text, matched_atoms, &matches);
   }
 }
@@ -276,8 +276,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       RE2::ANCHOR_BOTH,
   });
 
-  std::string pattern = fdp.ConsumeRandomLengthString(999);
-  std::string text = fdp.ConsumeRandomLengthString(999);
+  re2::String pattern = fdp.ConsumeRandomLengthString(999);
+  re2::String text = fdp.ConsumeRandomLengthString(999);
 
   TestOneInput(pattern, options, anchor, text);
   return 0;

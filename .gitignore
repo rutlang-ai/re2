@@ -4,3 +4,5 @@ core
 obj/
 benchlog.*
 user.bazelrc
+bazel-*
+MODULE.bazel.lock

@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 
 namespace re2 {
 
@@ -30,8 +30,8 @@ namespace re2 {
 class RegexpGenerator {
  public:
   RegexpGenerator(int maxatoms, int maxops,
-                  const std::vector<std::string>& atoms,
-                  const std::vector<std::string>& ops);
+                  const re2::Vector<re2::String>& atoms,
+                  const re2::Vector<re2::String>& ops);
   virtual ~RegexpGenerator() {}
 
   // Generates all the regular expressions, calling HandleRegexp(re) for each.
@@ -41,22 +41,22 @@ class RegexpGenerator {
   void GenerateRandom(int32_t seed, int n);
 
   // Handles a regular expression.  Must be provided by subclass.
-  virtual void HandleRegexp(const std::string& regexp) = 0;
+  virtual void HandleRegexp(const re2::String& regexp) = 0;
 
   // The egrep regexp operators: * + ? | and concatenation.
-  static const std::vector<std::string>& EgrepOps();
+  static const re2::Vector<re2::String>& EgrepOps();
 
  private:
-  void RunPostfix(const std::vector<std::string>& post);
-  void GeneratePostfix(std::vector<std::string>* post,
+  void RunPostfix(const re2::Vector<re2::String>& post);
+  void GeneratePostfix(re2::Vector<re2::String>* post,
                        int nstk, int ops, int lits);
-  bool GenerateRandomPostfix(std::vector<std::string>* post,
+  bool GenerateRandomPostfix(re2::Vector<re2::String>* post,
                              int nstk, int ops, int lits);
 
   int maxatoms_;                    // Maximum number of atoms allowed in expr.
   int maxops_;                      // Maximum number of ops allowed in expr.
-  std::vector<std::string> atoms_;  // Possible atoms.
-  std::vector<std::string> ops_;    // Possible ops.
+  re2::Vector<re2::String> atoms_;  // Possible atoms.
+  re2::Vector<re2::String> ops_;    // Possible ops.
   std::minstd_rand0 rng_;           // Random number generator.
 
   RegexpGenerator(const RegexpGenerator&) = delete;
@@ -66,11 +66,11 @@ class RegexpGenerator {
 // Helpers for preparing arguments to RegexpGenerator constructor.
 
 // Returns one string for each character in s.
-std::vector<std::string> Explode(absl::string_view s);
+re2::Vector<re2::String> Explode(re2::StringView s);
 
 // Splits string everywhere sep is found, returning
 // vector of pieces.
-std::vector<std::string> Split(absl::string_view sep, absl::string_view s);
+re2::Vector<re2::String> Split(re2::StringView sep, re2::StringView s);
 
 }  // namespace re2
 

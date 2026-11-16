@@ -10,9 +10,9 @@ int main() {
   re2::FilteredRE2 f;
   int id;
   f.Add("a.*b.*c", RE2::DefaultOptions, &id);
-  std::vector<std::string> v;
+  re2::Vector<re2::String> v;
   f.Compile(&v);
-  std::vector<int> ids;
+  re2::Vector<int> ids;
   f.FirstMatch("abbccc", ids);
 
   int n;

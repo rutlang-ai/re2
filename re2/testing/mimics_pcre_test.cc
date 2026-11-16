@@ -4,7 +4,7 @@
 
 #include <stddef.h>
 
-#include "absl/base/macros.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/prog.h"
 #include "re2/regexp.h"
@@ -60,7 +60,7 @@ static PCRETest tests[] = {
 };
 
 TEST(MimicsPCRE, SimpleTests) {
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(tests); i++) {
     const PCRETest& t = tests[i];
     for (size_t j = 0; j < 2; j++) {
       Regexp::ParseFlags flags = Regexp::LikePerl;

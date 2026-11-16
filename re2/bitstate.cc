@@ -24,9 +24,7 @@
 #include <limits>
 #include <utility>
 
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/pod_array.h"
 #include "re2/prog.h"
 #include "re2/regexp.h"
@@ -45,23 +43,23 @@ class BitState {
 
   // The usual Search prototype.
   // Can only call Search once per BitState.
-  bool Search(absl::string_view text, absl::string_view context, bool anchored,
-              bool longest, absl::string_view* submatch, int nsubmatch);
+  bool Search(re2::StringView text, re2::StringView context, bool anchored,
+              bool longest, re2::StringView* submatch, int nsubmatch);
 
  private:
-  static inline bool ShouldVisit(absl::string_view text, uint64_t* visited, uint16_t id, const char* p);
+  static inline bool ShouldVisit(re2::StringView text, uint64_t* visited, uint16_t id, const char* p);
   void Push(int id, const char* p);
   void GrowStack();
   bool TrySearch(int id, const char* p);
 
   // Search parameters
   Prog* prog_;                   // program being run
-  absl::string_view text_;       // text being searched
-  absl::string_view context_;    // greater context of text being searched
+  re2::StringView text_;       // text being searched
+  re2::StringView context_;    // greater context of text being searched
   bool anchored_;                // whether search is anchored at text.begin()
   bool longest_;                 // whether search wants leftmost-longest match
   bool endmatch_;                // whether match must end at text.end()
-  absl::string_view* submatch_;  // submatches to fill in
+  re2::StringView* submatch_;  // submatches to fill in
   int nsubmatch_;                //   # of submatches to fill in
 
   // Search state
@@ -92,7 +90,7 @@ BitState::BitState(Prog* prog)
 // We pass text and visited to this as a static method so that the
 // caller can do those loads once instead of this code dereferencing
 // them multiple times.
-bool BitState::ShouldVisit(absl::string_view text, uint64_t* visited, uint16_t list_id, const char* p) {
+bool BitState::ShouldVisit(re2::StringView text, uint64_t* visited, uint16_t list_id, const char* p) {
   int n = list_id * static_cast<int>(text.size()+1) +
           static_cast<int>(p-text.data());
   if (visited[n/kVisitedBits] & (uint64_t{1} << (n & (kVisitedBits-1))))
@@ -113,7 +111,7 @@ void BitState::Push(int id, const char* p) {
   if (njob_ >= job_.size()) {
     GrowStack();
     if (njob_ >= job_.size()) {
-      ABSL_LOG(DFATAL) << "GrowStack() failed: "
+      RE2_LOG(DFATAL) << "GrowStack() failed: "
                        << "njob_ = " << njob_ << ", "
                        << "job_.size() = " << job_.size();
       return;
@@ -175,7 +173,7 @@ bool BitState::TrySearch(int id0, const char* p0) {
     Prog::Inst* ip = prog_->inst(id);
     switch (ip->opcode()) {
       default:
-        ABSL_LOG(DFATAL) << "Unexpected opcode: " << ip->opcode();
+        RE2_LOG(DFATAL) << "Unexpected opcode: " << ip->opcode();
         return false;
 
       case kInstFail:
@@ -241,7 +239,7 @@ bool BitState::TrySearch(int id0, const char* p0) {
       CheckAndLoop:
         // Sanity check: id is the head of its list, which must
         // be the case if id-1 is the last of *its* list. :)
-        ABSL_DCHECK(id == 0 || prog_->inst(id-1)->last());
+        RE2_DCHECK(id == 0 || prog_->inst(id-1)->last());
         if (ShouldVisit(text_, visited, list_heads[id], p))
           goto Loop;
         break;
@@ -263,7 +261,7 @@ bool BitState::TrySearch(int id0, const char* p0) {
         if (submatch_[0].data() == NULL ||
             (longest_ && p > submatch_[0].data() + submatch_[0].size())) {
           for (int i = 0; i < nsubmatch_; i++)
-            submatch_[i] = absl::string_view(
+            submatch_[i] = re2::StringView(
                 cap_[2 * i],
                 static_cast<size_t>(cap_[2 * i + 1] - cap_[2 * i]));
         }
@@ -292,8 +290,8 @@ bool BitState::TrySearch(int id0, const char* p0) {
 }
 
 // Search text (within context) for prog_.
-bool BitState::Search(absl::string_view text, absl::string_view context,
-                      bool anchored, bool longest, absl::string_view* submatch,
+bool BitState::Search(re2::StringView text, re2::StringView context,
+                      bool anchored, bool longest, re2::StringView* submatch,
                       int nsubmatch) {
   // Search parameters.
   text_ = text;
@@ -310,7 +308,7 @@ bool BitState::Search(absl::string_view text, absl::string_view context,
   submatch_ = submatch;
   nsubmatch_ = nsubmatch;
   for (int i = 0; i < nsubmatch_; i++)
-    submatch_[i] = absl::string_view();
+    submatch_[i] = re2::StringView();
 
   // Allocate scratch space.
   int nvisited = prog_->list_count() * static_cast<int>(text.size()+1);
@@ -360,13 +358,13 @@ bool BitState::Search(absl::string_view text, absl::string_view context,
 }
 
 // Bit-state search.
-bool Prog::SearchBitState(absl::string_view text, absl::string_view context,
+bool Prog::SearchBitState(re2::StringView text, re2::StringView context,
                           Anchor anchor, MatchKind kind,
-                          absl::string_view* match, int nmatch) {
+                          re2::StringView* match, int nmatch) {
   // If full match, we ask for an anchored longest match
   // and then check that match[0] == text.
   // So make sure match[0] exists.
-  absl::string_view sp0;
+  re2::StringView sp0;
   if (kind == kFullMatch) {
     anchor = kAnchored;
     if (nmatch < 1) {

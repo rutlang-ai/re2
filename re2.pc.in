@@ -5,5 +5,6 @@ Name: re2
 Description: RE2 is a fast, safe, thread-friendly regular expression engine.
 Requires: @REQUIRES@
 Version: @SONAME@.0.0
-Cflags: -pthread -I${includedir}
+Cflags: -std=c++20 -D_GLIBCXX_NO_ASSERTIONS -pthread -I${includedir}
 Libs: -pthread -L${libdir} -lre2
+Libs.private: -lm

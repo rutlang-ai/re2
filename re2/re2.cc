@@ -17,19 +17,10 @@
 
 #include <algorithm>
 #include <atomic>
-#include <map>
-#include <string>
+#include <charconv>
 #include <utility>
-#include <vector>
 
-#include "absl/base/call_once.h"
-#include "absl/base/macros.h"
-#include "absl/container/fixed_array.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/ascii.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/prog.h"
 #include "re2/regexp.h"
 #include "re2/sparse_array.h"
@@ -41,6 +32,10 @@
 #endif
 
 namespace re2 {
+
+void LazyRE2::Init(const LazyRE2* lazy_re2) {
+  lazy_re2->ptr_ = new RE2(lazy_re2->pattern_, lazy_re2->options_);
+}
 
 // Controls the maximum count permitted by GlobalReplace(); -1 is unlimited.
 static int maximum_global_replace_count = -1;
@@ -78,21 +73,21 @@ RE2::Options::Options(RE2::CannedOptions opt)
 // and the false positives (thanks, Valgrind)
 // about memory leaks at program termination.
 struct EmptyStorage {
-  std::string empty_string;
-  std::map<std::string, int> empty_named_groups;
-  std::map<int, std::string> empty_group_names;
+  re2::String empty_string;
+  re2::Map<re2::String, int> empty_named_groups;
+  re2::Map<int, re2::String> empty_group_names;
 };
 alignas(EmptyStorage) static char empty_storage[sizeof(EmptyStorage)];
 
-static inline std::string* empty_string() {
+static inline re2::String* empty_string() {
   return &reinterpret_cast<EmptyStorage*>(empty_storage)->empty_string;
 }
 
-static inline std::map<std::string, int>* empty_named_groups() {
+static inline re2::Map<re2::String, int>* empty_named_groups() {
   return &reinterpret_cast<EmptyStorage*>(empty_storage)->empty_named_groups;
 }
 
-static inline std::map<int, std::string>* empty_group_names() {
+static inline re2::Map<int, re2::String>* empty_group_names() {
   return &reinterpret_cast<EmptyStorage*>(empty_storage)->empty_group_names;
 }
 
@@ -135,15 +130,15 @@ static RE2::ErrorCode RegexpErrorToRE2(re2::RegexpStatusCode code) {
   return RE2::ErrorInternal;
 }
 
-static std::string trunc(absl::string_view pattern) {
+static re2::String trunc(re2::StringView pattern) {
   if (pattern.size() < 100)
-    return std::string(pattern);
-  return std::string(pattern.substr(0, 100)) + "...";
+    return re2::String(pattern);
+  return re2::String(pattern.substr(0, 100)) + "...";
 }
 
 
 RE2::RE2(const char* pattern) {
-  // If absl::string_view becomes an alias for std::string_view,
+  // If re2::StringView becomes an alias for re2::StringView,
   // it will stop allowing NULL to be converted.
   // Handle NULL explicitly to keep callers working no matter what.
   if (pattern == NULL)
@@ -151,15 +146,15 @@ RE2::RE2(const char* pattern) {
   Init(pattern, DefaultOptions);
 }
 
-RE2::RE2(const std::string& pattern) {
+RE2::RE2(const re2::String& pattern) {
   Init(pattern, DefaultOptions);
 }
 
-RE2::RE2(absl::string_view pattern) {
+RE2::RE2(re2::StringView pattern) {
   Init(pattern, DefaultOptions);
 }
 
-RE2::RE2(absl::string_view pattern, const Options& options) {
+RE2::RE2(re2::StringView pattern, const Options& options) {
   Init(pattern, options);
 }
 
@@ -168,7 +163,7 @@ int RE2::Options::ParseFlags() const {
   switch (encoding()) {
     default:
       if (log_errors())
-        ABSL_LOG(ERROR) << "Unknown encoding " << encoding();
+        RE2_LOG(ERROR) << "Unknown encoding " << encoding();
       break;
     case RE2::Options::EncodingUTF8:
       break;
@@ -207,13 +202,14 @@ int RE2::Options::ParseFlags() const {
   return flags;
 }
 
-void RE2::Init(absl::string_view pattern, const Options& options) {
-  static absl::once_flag empty_once;
-  absl::call_once(empty_once, []() {
+void RE2::Init(re2::StringView pattern, const Options& options) {
+  static re2::internal::once_flag empty_once;
+  re2::internal::call_once(empty_once, []() {
     (void) new (empty_storage) EmptyStorage;
   });
 
-  pattern_ = new std::string(pattern);
+  pattern_ = pattern.size() <= re2::String().max_size()
+                 ? new re2::String(pattern) : new re2::String;
   options_.Copy(options);
   entire_regexp_ = NULL;
   suffix_regexp_ = NULL;
@@ -226,11 +222,18 @@ void RE2::Init(absl::string_view pattern, const Options& options) {
   is_one_pass_ = false;
   prefix_foldcase_ = false;
   prefix_.clear();
+  prefix_view_ = re2::StringView();
   prog_ = NULL;
 
   rprog_ = NULL;
   named_groups_ = NULL;
   group_names_ = NULL;
+
+  if (pattern.size() > pattern_->max_size()) {
+    error_ = new re2::String("pattern exceeds SmallString's size limit");
+    error_code_ = ErrorPatternTooLarge;
+    return;
+  }
 
   RegexpStatus status;
   entire_regexp_ = Regexp::Parse(
@@ -239,12 +242,12 @@ void RE2::Init(absl::string_view pattern, const Options& options) {
     &status);
   if (entire_regexp_ == NULL) {
     if (options_.log_errors()) {
-      ABSL_LOG(ERROR) << "Error parsing '" << trunc(*pattern_) << "': "
+      RE2_LOG(ERROR) << "Error parsing '" << trunc(*pattern_) << "': "
                       << status.Text();
     }
-    error_ = new std::string(status.Text());
+    error_ = new re2::String(status.Text());
     error_code_ = RegexpErrorToRE2(status.code());
-    error_arg_ = new std::string(status.error_arg());
+    error_arg_ = new re2::String(status.error_arg());
     return;
   }
 
@@ -258,21 +261,23 @@ void RE2::Init(absl::string_view pattern, const Options& options) {
     suffix_regexp_ = entire_regexp_->Incref();
   }
 
+  prefix_view_ = re2::StringView(prefix_);
+
   // Two thirds of the memory goes to the forward Prog,
   // one third to the reverse prog, because the forward
   // Prog has two DFAs but the reverse prog has one.
   prog_ = suffix_regexp_->CompileToProg(options_.max_mem()*2/3);
   if (prog_ == NULL) {
     if (options_.log_errors())
-      ABSL_LOG(ERROR) << "Error compiling '" << trunc(*pattern_) << "'";
-    error_ = new std::string("pattern too large - compile failed");
+      RE2_LOG(ERROR) << "Error compiling '" << trunc(*pattern_) << "'";
+    error_ = new re2::String("pattern too large - compile failed");
     error_code_ = RE2::ErrorPatternTooLarge;
     return;
   }
 
   // We used to compute this lazily, but it's used during the
   // typical control flow for a match call, so we now compute
-  // it eagerly, which avoids the overhead of absl::once_flag.
+  // it eagerly, which avoids the overhead of re2::internal::once_flag.
   num_captures_ = suffix_regexp_->NumCaptures();
 
   // Could delay this until the first match call that
@@ -285,12 +290,12 @@ void RE2::Init(absl::string_view pattern, const Options& options) {
 
 // Returns rprog_, computing it if needed.
 re2::Prog* RE2::ReverseProg() const {
-  absl::call_once(rprog_once_, [](const RE2* re) {
+  re2::internal::call_once(rprog_once_, [](const RE2* re) {
     re->rprog_ =
         re->suffix_regexp_->CompileToReverseProg(re->options_.max_mem() / 3);
     if (re->rprog_ == NULL) {
       if (re->options_.log_errors())
-        ABSL_LOG(ERROR) << "Error reverse compiling '" << trunc(*re->pattern_)
+        RE2_LOG(ERROR) << "Error reverse compiling '" << trunc(*re->pattern_)
                         << "'";
       // We no longer touch error_ and error_code_ because failing to compile
       // the reverse Prog is not a showstopper: falling back to NFA execution
@@ -337,7 +342,7 @@ int RE2::ReverseProgramSize() const {
 
 // Finds the most significant non-zero bit in n.
 static int FindMSBSet(uint32_t n) {
-  ABSL_DCHECK_NE(n, uint32_t{0});
+  RE2_DCHECK_NE(n, uint32_t{0});
 #if defined(__GNUC__)
   return 31 ^ __builtin_clz(n);
 #elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
@@ -357,7 +362,7 @@ static int FindMSBSet(uint32_t n) {
 #endif
 }
 
-static int Fanout(Prog* prog, std::vector<int>* histogram) {
+static int Fanout(Prog* prog, re2::Vector<int>* histogram) {
   SparseArray<int> fanout(prog->size());
   prog->Fanout(&fanout);
   int data[32] = {};
@@ -376,13 +381,13 @@ static int Fanout(Prog* prog, std::vector<int>* histogram) {
   return size-1;
 }
 
-int RE2::ProgramFanout(std::vector<int>* histogram) const {
+int RE2::ProgramFanout(re2::Vector<int>* histogram) const {
   if (prog_ == NULL)
     return -1;
   return Fanout(prog_, histogram);
 }
 
-int RE2::ReverseProgramFanout(std::vector<int>* histogram) const {
+int RE2::ReverseProgramFanout(re2::Vector<int>* histogram) const {
   if (prog_ == NULL)
     return -1;
   Prog* prog = ReverseProg();
@@ -392,8 +397,8 @@ int RE2::ReverseProgramFanout(std::vector<int>* histogram) const {
 }
 
 // Returns named_groups_, computing it if needed.
-const std::map<std::string, int>& RE2::NamedCapturingGroups() const {
-  absl::call_once(named_groups_once_, [](const RE2* re) {
+const re2::Map<re2::String, int>& RE2::NamedCapturingGroups() const {
+  re2::internal::call_once(named_groups_once_, [](const RE2* re) {
     if (re->suffix_regexp_ != NULL)
       re->named_groups_ = re->suffix_regexp_->NamedCaptures();
     if (re->named_groups_ == NULL)
@@ -403,8 +408,8 @@ const std::map<std::string, int>& RE2::NamedCapturingGroups() const {
 }
 
 // Returns group_names_, computing it if needed.
-const std::map<int, std::string>& RE2::CapturingGroupNames() const {
-  absl::call_once(group_names_once_, [](const RE2* re) {
+const re2::Map<int, re2::String>& RE2::CapturingGroupNames() const {
+  re2::internal::call_once(group_names_once_, [](const RE2* re) {
     if (re->suffix_regexp_ != NULL)
       re->group_names_ = re->suffix_regexp_->CaptureNames();
     if (re->group_names_ == NULL)
@@ -415,17 +420,19 @@ const std::map<int, std::string>& RE2::CapturingGroupNames() const {
 
 /***** Convenience interfaces *****/
 
-bool RE2::FullMatchN(absl::string_view text, const RE2& re,
+bool RE2::FullMatchN(re2::StringView text, const RE2& re,
                      const Arg* const args[], int n) {
+  if (n == 0) return re.Match(text, 0, text.size(), ANCHOR_BOTH, NULL, 0);
   return re.DoMatch(text, ANCHOR_BOTH, NULL, args, n);
 }
 
-bool RE2::PartialMatchN(absl::string_view text, const RE2& re,
+bool RE2::PartialMatchN(re2::StringView text, const RE2& re,
                         const Arg* const args[], int n) {
+  if (n == 0) return re.Match(text, 0, text.size(), UNANCHORED, NULL, 0);
   return re.DoMatch(text, UNANCHORED, NULL, args, n);
 }
 
-bool RE2::ConsumeN(absl::string_view* input, const RE2& re,
+bool RE2::ConsumeN(re2::StringView* input, const RE2& re,
                    const Arg* const args[], int n) {
   size_t consumed;
   if (re.DoMatch(*input, ANCHOR_START, &consumed, args, n)) {
@@ -436,7 +443,7 @@ bool RE2::ConsumeN(absl::string_view* input, const RE2& re,
   }
 }
 
-bool RE2::FindAndConsumeN(absl::string_view* input, const RE2& re,
+bool RE2::FindAndConsumeN(re2::StringView* input, const RE2& re,
                           const Arg* const args[], int n) {
   size_t consumed;
   if (re.DoMatch(*input, UNANCHORED, &consumed, args, n)) {
@@ -447,42 +454,42 @@ bool RE2::FindAndConsumeN(absl::string_view* input, const RE2& re,
   }
 }
 
-bool RE2::Replace(std::string* str,
+bool RE2::Replace(re2::String* str,
                   const RE2& re,
-                  absl::string_view rewrite) {
-  absl::string_view vec[kVecSize];
+                  re2::StringView rewrite) {
+  re2::StringView vec[kVecSize];
   int nvec = 1 + MaxSubmatch(rewrite);
   if (nvec > 1 + re.NumberOfCapturingGroups())
     return false;
-  if (nvec > static_cast<int>(ABSL_ARRAYSIZE(vec)))
+  if (nvec > static_cast<int>(RE2_ARRAYSIZE(vec)))
     return false;
   if (!re.Match(*str, 0, str->size(), UNANCHORED, vec, nvec))
     return false;
 
-  std::string s;
+  re2::String s;
   if (!re.Rewrite(&s, rewrite, vec, nvec))
     return false;
 
-  ABSL_DCHECK_GE(vec[0].data(), str->data());
-  ABSL_DCHECK_LE(vec[0].data() + vec[0].size(), str->data() + str->size());
+  RE2_DCHECK_GE(vec[0].data(), str->data());
+  RE2_DCHECK_LE(vec[0].data() + vec[0].size(), str->data() + str->size());
   str->replace(vec[0].data() - str->data(), vec[0].size(), s);
   return true;
 }
 
-int RE2::GlobalReplace(std::string* str,
+int RE2::GlobalReplace(re2::String* str,
                        const RE2& re,
-                       absl::string_view rewrite) {
-  absl::string_view vec[kVecSize];
+                       re2::StringView rewrite) {
+  re2::StringView vec[kVecSize];
   int nvec = 1 + MaxSubmatch(rewrite);
   if (nvec > 1 + re.NumberOfCapturingGroups())
     return false;
-  if (nvec > static_cast<int>(ABSL_ARRAYSIZE(vec)))
+  if (nvec > static_cast<int>(RE2_ARRAYSIZE(vec)))
     return false;
 
   const char* p = str->data();
   const char* ep = p + str->size();
   const char* lastend = NULL;
-  std::string out;
+  re2::String out;
   int count = 0;
   while (p <= ep) {
     if (maximum_global_replace_count != -1 &&
@@ -539,15 +546,15 @@ int RE2::GlobalReplace(std::string* str,
   return count;
 }
 
-bool RE2::Extract(absl::string_view text,
+bool RE2::Extract(re2::StringView text,
                   const RE2& re,
-                  absl::string_view rewrite,
-                  std::string* out) {
-  absl::string_view vec[kVecSize];
+                  re2::StringView rewrite,
+                  re2::String* out) {
+  re2::StringView vec[kVecSize];
   int nvec = 1 + MaxSubmatch(rewrite);
   if (nvec > 1 + re.NumberOfCapturingGroups())
     return false;
-  if (nvec > static_cast<int>(ABSL_ARRAYSIZE(vec)))
+  if (nvec > static_cast<int>(RE2_ARRAYSIZE(vec)))
     return false;
   if (!re.Match(text, 0, text.size(), UNANCHORED, vec, nvec))
     return false;
@@ -556,8 +563,8 @@ bool RE2::Extract(absl::string_view text,
   return re.Rewrite(out, rewrite, vec, nvec);
 }
 
-std::string RE2::QuoteMeta(absl::string_view unquoted) {
-  std::string result;
+re2::String RE2::QuoteMeta(re2::StringView unquoted) {
+  re2::String result;
   result.reserve(unquoted.size() << 1);
 
   // Escape any ascii character not in [A-Za-z_0-9].
@@ -594,7 +601,7 @@ std::string RE2::QuoteMeta(absl::string_view unquoted) {
   return result;
 }
 
-bool RE2::PossibleMatchRange(std::string* min, std::string* max,
+bool RE2::PossibleMatchRange(re2::String* min, re2::String* max,
                              int maxlen) const {
   if (prog_ == NULL)
     return false;
@@ -616,7 +623,7 @@ bool RE2::PossibleMatchRange(std::string* min, std::string* max,
   }
 
   // Add to prefix min max using PossibleMatchRange on regexp.
-  std::string dmin, dmax;
+  re2::String dmin, dmax;
   maxlen -= n;
   if (maxlen > 0 && prog_->PossibleMatchRange(&dmin, &dmax, maxlen)) {
     min->append(dmin);
@@ -655,28 +662,28 @@ static int ascii_strcasecmp(const char* a, const char* b, size_t len) {
 
 /***** Actual matching and rewriting code *****/
 
-bool RE2::Match(absl::string_view text,
+bool RE2::Match(re2::StringView text,
                 size_t startpos,
                 size_t endpos,
                 Anchor re_anchor,
-                absl::string_view* submatch,
+                re2::StringView* submatch,
                 int nsubmatch) const {
   if (!ok()) {
     if (options_.log_errors())
-      ABSL_LOG(ERROR) << "Invalid RE2: " << *error_;
+      RE2_LOG(ERROR) << "Invalid RE2: " << *error_;
     return false;
   }
 
   if (startpos > endpos || endpos > text.size()) {
     if (options_.log_errors())
-      ABSL_LOG(ERROR) << "RE2: invalid startpos, endpos pair. ["
+      RE2_LOG(ERROR) << "RE2: invalid startpos, endpos pair. ["
                       << "startpos: " << startpos << ", "
                       << "endpos: " << endpos << ", "
                       << "text size: " << text.size() << "]";
     return false;
   }
 
-  absl::string_view subtext = text;
+  re2::StringView subtext = text;
   subtext.remove_prefix(startpos);
   subtext.remove_suffix(text.size() - endpos);
 
@@ -684,8 +691,8 @@ bool RE2::Match(absl::string_view text,
 
   // Don't ask for the location if we won't use it.
   // SearchDFA can do extra optimizations in that case.
-  absl::string_view match;
-  absl::string_view* matchp = &match;
+  re2::StringView match;
+  re2::StringView* matchp = &match;
   if (nsubmatch == 0)
     matchp = NULL;
 
@@ -708,17 +715,17 @@ bool RE2::Match(absl::string_view text,
 
   // Check for the required prefix, if any.
   size_t prefixlen = 0;
-  if (!prefix_.empty()) {
+  if (!prefix_view_.empty()) {
     if (startpos != 0)
       return false;
-    prefixlen = prefix_.size();
+    prefixlen = prefix_view_.size();
     if (prefixlen > subtext.size())
       return false;
     if (prefix_foldcase_) {
-      if (ascii_strcasecmp(&prefix_[0], subtext.data(), prefixlen) != 0)
+      if (ascii_strcasecmp(prefix_view_.data(), subtext.data(), prefixlen) != 0)
         return false;
     } else {
-      if (memcmp(&prefix_[0], subtext.data(), prefixlen) != 0)
+      if (memcmp(prefix_view_.data(), subtext.data(), prefixlen) != 0)
         return false;
     }
     subtext.remove_prefix(prefixlen);
@@ -732,17 +739,31 @@ bool RE2::Match(absl::string_view text,
       longest_match_ ? Prog::kLongestMatch : Prog::kFirstMatch;
 
   bool can_one_pass = is_one_pass_ && ncap <= Prog::kMaxOnePassCapture;
-  bool can_bit_state = prog_->CanBitState();
-  size_t bit_state_text_max_size = prog_->bit_state_text_max_size();
-
 #ifdef RE2_HAVE_THREAD_LOCAL
   hooks::context = this;
 #endif
+  // The usual anchored capture match needs no DFA/BitState bookkeeping.
+  // Use exactly the same OnePass selection criteria as the general path.
+  if (can_one_pass && (re_anchor == ANCHOR_BOTH || re_anchor == ANCHOR_START) &&
+      text.size() <= 4096 && (ncap > 1 || text.size() <= 16)) {
+    Prog::MatchKind onepass_kind =
+        re_anchor == ANCHOR_BOTH ? Prog::kFullMatch : kind;
+    if (!prog_->SearchOnePass(subtext, text, Prog::kAnchored, onepass_kind,
+                             submatch, ncap)) return false;
+    if (prefixlen > 0 && nsubmatch > 0)
+      submatch[0] = re2::StringView(submatch[0].data() - prefixlen,
+                                  submatch[0].size() + prefixlen);
+    for (int i = ncap; i < nsubmatch; ++i) submatch[i] = re2::StringView();
+    return true;
+  }
+  bool can_bit_state = prog_->CanBitState();
+  size_t bit_state_text_max_size = prog_->bit_state_text_max_size();
+
   bool dfa_failed = false;
   bool skipped_test = false;
   switch (re_anchor) {
     default:
-      ABSL_LOG(DFATAL) << "Unexpected re_anchor value: " << re_anchor;
+      RE2_LOG(DFATAL) << "Unexpected re_anchor value: " << re_anchor;
       return false;
 
     case UNANCHORED: {
@@ -760,7 +781,7 @@ bool RE2::Match(absl::string_view text,
                              Prog::kLongestMatch, matchp, &dfa_failed, NULL)) {
           if (dfa_failed) {
             if (options_.log_errors())
-              ABSL_LOG(ERROR) << "DFA out of memory: "
+              RE2_LOG(ERROR) << "DFA out of memory: "
                               << "pattern length " << pattern_->size() << ", "
                               << "program size " << prog->size() << ", "
                               << "list count " << prog->list_count() << ", "
@@ -780,7 +801,7 @@ bool RE2::Match(absl::string_view text,
                             matchp, &dfa_failed, NULL)) {
         if (dfa_failed) {
           if (options_.log_errors())
-            ABSL_LOG(ERROR) << "DFA out of memory: "
+            RE2_LOG(ERROR) << "DFA out of memory: "
                             << "pattern length " << pattern_->size() << ", "
                             << "program size " << prog_->size() << ", "
                             << "list count " << prog_->list_count() << ", "
@@ -806,7 +827,7 @@ bool RE2::Match(absl::string_view text,
                            Prog::kLongestMatch, &match, &dfa_failed, NULL)) {
         if (dfa_failed) {
           if (options_.log_errors())
-            ABSL_LOG(ERROR) << "DFA out of memory: "
+            RE2_LOG(ERROR) << "DFA out of memory: "
                             << "pattern length " << pattern_->size() << ", "
                             << "program size " << prog->size() << ", "
                             << "list count " << prog->list_count() << ", "
@@ -816,7 +837,7 @@ bool RE2::Match(absl::string_view text,
           break;
         }
         if (options_.log_errors())
-          ABSL_LOG(ERROR) << "SearchDFA inconsistency";
+          RE2_LOG(ERROR) << "SearchDFA inconsistency";
         return false;
       }
       break;
@@ -849,7 +870,7 @@ bool RE2::Match(absl::string_view text,
                             &match, &dfa_failed, NULL)) {
         if (dfa_failed) {
           if (options_.log_errors())
-            ABSL_LOG(ERROR) << "DFA out of memory: "
+            RE2_LOG(ERROR) << "DFA out of memory: "
                             << "pattern length " << pattern_->size() << ", "
                             << "program size " << prog_->size() << ", "
                             << "list count " << prog_->list_count() << ", "
@@ -868,7 +889,7 @@ bool RE2::Match(absl::string_view text,
     if (ncap == 1)
       submatch[0] = match;
   } else {
-    absl::string_view subtext1;
+    re2::StringView subtext1;
     if (skipped_test) {
       // DFA ran out of memory or was skipped:
       // need to search in entire original text.
@@ -885,20 +906,20 @@ bool RE2::Match(absl::string_view text,
     if (can_one_pass && anchor != Prog::kUnanchored) {
       if (!prog_->SearchOnePass(subtext1, text, anchor, kind, submatch, ncap)) {
         if (!skipped_test && options_.log_errors())
-          ABSL_LOG(ERROR) << "SearchOnePass inconsistency";
+          RE2_LOG(ERROR) << "SearchOnePass inconsistency";
         return false;
       }
     } else if (can_bit_state && subtext1.size() <= bit_state_text_max_size) {
       if (!prog_->SearchBitState(subtext1, text, anchor,
                                  kind, submatch, ncap)) {
         if (!skipped_test && options_.log_errors())
-          ABSL_LOG(ERROR) << "SearchBitState inconsistency";
+          RE2_LOG(ERROR) << "SearchBitState inconsistency";
         return false;
       }
     } else {
       if (!prog_->SearchNFA(subtext1, text, anchor, kind, submatch, ncap)) {
         if (!skipped_test && options_.log_errors())
-          ABSL_LOG(ERROR) << "SearchNFA inconsistency";
+          RE2_LOG(ERROR) << "SearchNFA inconsistency";
         return false;
       }
     }
@@ -906,24 +927,24 @@ bool RE2::Match(absl::string_view text,
 
   // Adjust overall match for required prefix that we stripped off.
   if (prefixlen > 0 && nsubmatch > 0)
-    submatch[0] = absl::string_view(submatch[0].data() - prefixlen,
+    submatch[0] = re2::StringView(submatch[0].data() - prefixlen,
                                     submatch[0].size() + prefixlen);
 
   // Zero submatches that don't exist in the regexp.
   for (int i = ncap; i < nsubmatch; i++)
-    submatch[i] = absl::string_view();
+    submatch[i] = re2::StringView();
   return true;
 }
 
 // Internal matcher - like Match() but takes Args not string_views.
-bool RE2::DoMatch(absl::string_view text,
+bool RE2::DoMatch(re2::StringView text,
                   Anchor re_anchor,
                   size_t* consumed,
                   const Arg* const* args,
                   int n) const {
   if (!ok()) {
     if (options_.log_errors())
-      ABSL_LOG(ERROR) << "Invalid RE2: " << *error_;
+      RE2_LOG(ERROR) << "Invalid RE2: " << *error_;
     return false;
   }
 
@@ -932,15 +953,15 @@ bool RE2::DoMatch(absl::string_view text,
     return false;
   }
 
-  // Count number of capture groups needed.
-  int nvec;
+  // No capture storage is needed for the common boolean-only match.
   if (n == 0 && consumed == NULL)
-    nvec = 0;
-  else
-    nvec = n+1;
+    return Match(text, 0, text.size(), re_anchor, NULL, 0);
 
-  absl::FixedArray<absl::string_view, kVecSize> vec_storage(nvec);
-  absl::string_view* vec = vec_storage.data();
+  // Count number of capture groups needed.
+  const int nvec = n+1;
+
+  re2::internal::FixedArray<re2::StringView, kVecSize> vec_storage(nvec);
+  re2::StringView* vec = vec_storage.data();
 
   if (!Match(text, 0, text.size(), re_anchor, vec, nvec)) {
     return false;
@@ -956,7 +977,7 @@ bool RE2::DoMatch(absl::string_view text,
 
   // If we got here, we must have matched the whole pattern.
   for (int i = 0; i < n; i++) {
-    absl::string_view s = vec[i+1];
+    re2::StringView s = vec[i+1];
     if (!args[i]->Parse(s.data(), s.size())) {
       // TODO: Should we indicate what the error was?
       return false;
@@ -968,8 +989,8 @@ bool RE2::DoMatch(absl::string_view text,
 
 // Checks that the rewrite string is well-formed with respect to this
 // regular expression.
-bool RE2::CheckRewriteString(absl::string_view rewrite,
-                             std::string* error) const {
+bool RE2::CheckRewriteString(re2::StringView rewrite,
+                             re2::String* error) const {
   int max_token = -1;
   for (const char *s = rewrite.data(), *end = s + rewrite.size();
        s < end; s++) {
@@ -985,7 +1006,7 @@ bool RE2::CheckRewriteString(absl::string_view rewrite,
     if (c == '\\') {
       continue;
     }
-    if (!absl::ascii_isdigit(c)) {
+    if (!re2::internal::ascii_isdigit(c)) {
       *error = "Rewrite schema error: "
                "'\\' must be followed by a digit or '\\'.";
       return false;
@@ -997,7 +1018,7 @@ bool RE2::CheckRewriteString(absl::string_view rewrite,
   }
 
   if (max_token > NumberOfCapturingGroups()) {
-    *error = absl::StrFormat(
+    *error = re2::internal::StrFormat(
         "Rewrite schema requests %d matches, but the regexp only has %d "
         "parenthesized subexpressions.",
         max_token, NumberOfCapturingGroups());
@@ -1008,14 +1029,14 @@ bool RE2::CheckRewriteString(absl::string_view rewrite,
 
 // Returns the maximum submatch needed for the rewrite to be done by Replace().
 // E.g. if rewrite == "foo \\2,\\1", returns 2.
-int RE2::MaxSubmatch(absl::string_view rewrite) {
+int RE2::MaxSubmatch(re2::StringView rewrite) {
   int max = 0;
   for (const char *s = rewrite.data(), *end = s + rewrite.size();
        s < end; s++) {
     if (*s == '\\') {
       s++;
       int c = (s < end) ? *s : -1;
-      if (absl::ascii_isdigit(c)) {
+      if (re2::internal::ascii_isdigit(c)) {
         int n = (c - '0');
         if (n > max)
           max = n;
@@ -1027,9 +1048,9 @@ int RE2::MaxSubmatch(absl::string_view rewrite) {
 
 // Append the "rewrite" string, with backslash substitutions from "vec",
 // to string "out".
-bool RE2::Rewrite(std::string* out,
-                  absl::string_view rewrite,
-                  const absl::string_view* vec,
+bool RE2::Rewrite(re2::String* out,
+                  re2::StringView rewrite,
+                  const re2::StringView* vec,
                   int veclen) const {
   for (const char *s = rewrite.data(), *end = s + rewrite.size();
        s < end; s++) {
@@ -1039,23 +1060,23 @@ bool RE2::Rewrite(std::string* out,
     }
     s++;
     int c = (s < end) ? *s : -1;
-    if (absl::ascii_isdigit(c)) {
+    if (re2::internal::ascii_isdigit(c)) {
       int n = (c - '0');
       if (n >= veclen) {
         if (options_.log_errors()) {
-          ABSL_LOG(ERROR) << "invalid substitution \\" << n
+          RE2_LOG(ERROR) << "invalid substitution \\" << n
                           << " from " << veclen << " groups";
         }
         return false;
       }
-      absl::string_view snip = vec[n];
+      re2::StringView snip = vec[n];
       if (!snip.empty())
         out->append(snip.data(), snip.size());
     } else if (c == '\\') {
       out->push_back('\\');
     } else {
       if (options_.log_errors())
-        ABSL_LOG(ERROR) << "invalid rewrite pattern: " << rewrite;
+        RE2_LOG(ERROR) << "invalid rewrite pattern: " << rewrite;
       return false;
     }
   }
@@ -1073,16 +1094,18 @@ bool Parse(const char* str, size_t n, void* dest) {
 }
 
 template <>
-bool Parse(const char* str, size_t n, std::string* dest) {
+bool Parse(const char* str, size_t n, re2::String* dest) {
   if (dest == NULL) return true;
-  dest->assign(str, n);
+  if (n > dest->max_size()) return false;
+  if (n == 0) dest->clear();
+  else dest->assign(str, n);
   return true;
 }
 
 template <>
-bool Parse(const char* str, size_t n, absl::string_view* dest) {
+bool Parse(const char* str, size_t n, re2::StringView* dest) {
   if (dest == NULL) return true;
-  *dest = absl::string_view(str, n);
+  *dest = re2::StringView(str, n);
   return true;
 }
 
@@ -1120,13 +1143,13 @@ static const char* TerminateNumber(char* buf, size_t nbuf, const char* str,
                                    size_t* np, bool accept_spaces) {
   size_t n = *np;
   if (n == 0) return "";
-  if (n > 0 && absl::ascii_isspace(*str)) {
+  if (n > 0 && re2::internal::ascii_isspace(*str)) {
     // We are less forgiving than the strtoxxx() routines and do not
     // allow leading spaces. We do allow leading spaces for floats.
     if (!accept_spaces) {
       return "";
     }
-    while (n > 0 && absl::ascii_isspace(*str)) {
+    while (n > 0 && re2::internal::ascii_isspace(*str)) {
       n--;
       str++;
     }
@@ -1202,8 +1225,25 @@ bool Parse(const char* str, size_t n, double* dest) {
   return true;
 }
 
+// Integral from_chars is header-only. The common decimal case needs neither
+// a NUL-terminated copy nor locale/errno handling. Preserve strto*'s leading '+'.
+template <class T>
+static bool ParseDecimal(const char* str, size_t n, T* dest) {
+  if (n == 0) return false;
+  if (*str == '+') {
+    ++str; --n;
+    if (n == 0 || !re2::internal::ascii_isdigit(*str)) return false;
+  }
+  T value;
+  auto result = std::from_chars(str, str+n, value, 10);
+  if (result.ec != std::errc() || result.ptr != str+n) return false;
+  if (dest != NULL) *dest = value;
+  return true;
+}
+
 template <>
 bool Parse(const char* str, size_t n, long* dest, int radix) {
+  if (radix == 10) return ParseDecimal(str, n, dest);
   if (n == 0) return false;
   char buf[kMaxNumberLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, false);
@@ -1219,6 +1259,7 @@ bool Parse(const char* str, size_t n, long* dest, int radix) {
 
 template <>
 bool Parse(const char* str, size_t n, unsigned long* dest, int radix) {
+  if (radix == 10) return ParseDecimal(str, n, dest);
   if (n == 0) return false;
   char buf[kMaxNumberLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, false);
@@ -1280,6 +1321,7 @@ bool Parse(const char* str, size_t n, unsigned int* dest, int radix) {
 
 template <>
 bool Parse(const char* str, size_t n, long long* dest, int radix) {
+  if (radix == 10) return ParseDecimal(str, n, dest);
   if (n == 0) return false;
   char buf[kMaxNumberLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, false);
@@ -1295,6 +1337,7 @@ bool Parse(const char* str, size_t n, long long* dest, int radix) {
 
 template <>
 bool Parse(const char* str, size_t n, unsigned long long* dest, int radix) {
+  if (radix == 10) return ParseDecimal(str, n, dest);
   if (n == 0) return false;
   char buf[kMaxNumberLength+1];
   str = TerminateNumber(buf, sizeof buf, str, &n, false);

@@ -22,7 +22,7 @@
 //
 // Regexp::MimicsPCRE checks for any of these conditions.
 
-#include "absl/log/absl_log.h"
+#include "re2/support.h"
 #include "re2/regexp.h"
 #include "re2/walker-inl.h"
 
@@ -44,7 +44,7 @@ class PCREWalker : public Regexp::Walker<bool> {
   virtual bool ShortVisit(Regexp* re, bool a) {
     // Should never be called: we use Walk(), not WalkExponential().
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    ABSL_LOG(DFATAL) << "PCREWalker::ShortVisit called";
+    RE2_LOG(DFATAL) << "PCREWalker::ShortVisit called";
 #endif
     return a;
   }
@@ -128,7 +128,7 @@ class EmptyStringWalker : public Regexp::Walker<bool> {
   virtual bool ShortVisit(Regexp* re, bool a) {
     // Should never be called: we use Walk(), not WalkExponential().
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    ABSL_LOG(DFATAL) << "EmptyStringWalker::ShortVisit called";
+    RE2_LOG(DFATAL) << "EmptyStringWalker::ShortVisit called";
 #endif
     return a;
   }

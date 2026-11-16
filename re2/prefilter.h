@@ -9,12 +9,8 @@
 // Rather than using Prefilter class directly, use FilteredRE2.
 // See filtered_re2.h
 
-#include <set>
-#include <string>
-#include <vector>
 
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
+#include "re2/support.h"
 
 namespace re2 {
 
@@ -37,19 +33,19 @@ class Prefilter {
   ~Prefilter();
 
   Op op() { return op_; }
-  const std::string& atom() const { return atom_; }
+  const re2::String& atom() const { return atom_; }
   void set_unique_id(int id) { unique_id_ = id; }
   int unique_id() const { return unique_id_; }
 
   // The children of the Prefilter node.
-  std::vector<Prefilter*>* subs() {
-    ABSL_DCHECK(op_ == AND || op_ == OR);
+  re2::Vector<Prefilter*>* subs() {
+    RE2_DCHECK(op_ == AND || op_ == OR);
     return subs_;
   }
 
   // Set the children vector. Prefilter takes ownership of subs and
   // subs_ will be deleted when Prefilter is deleted.
-  void set_subs(std::vector<Prefilter*>* subs) { subs_ = subs; }
+  void set_subs(re2::Vector<Prefilter*>* subs) { subs_ = subs; }
 
   // Given a RE2, return a Prefilter. The caller takes ownership of
   // the Prefilter and should deallocate it. Returns NULL if Prefilter
@@ -57,11 +53,11 @@ class Prefilter {
   static Prefilter* FromRE2(const RE2* re2);
 
   // Returns a readable debug string of the prefilter.
-  std::string DebugString() const;
+  re2::String DebugString() const;
 
  private:
   template <typename H>
-  friend H AbslHashValue(H h, const Prefilter& a) {
+  friend H RE2HashValue(H h, const Prefilter& a) {
     h = H::combine(std::move(h), a.op_);
     if (a.op_ == ATOM) {
       h = H::combine(std::move(h), a.atom_);
@@ -102,14 +98,14 @@ class Prefilter {
   // then lexicographically. This ordering makes it easier to reduce the
   // set of strings in SimplifyStringSet.
   struct LengthThenLex {
-    bool operator()(const std::string& a, const std::string& b) const {
+    bool operator()(const re2::String& a, const re2::String& b) const {
        return (a.size() < b.size()) || (a.size() == b.size() && a < b);
     }
   };
 
   class Info;
 
-  using SSet = std::set<std::string, LengthThenLex>;
+  using SSet = re2::OrderedSet<re2::String, LengthThenLex>;
   using SSIter = SSet::iterator;
   using ConstSSIter = SSet::const_iterator;
 
@@ -126,7 +122,7 @@ class Prefilter {
 
   static Prefilter* FromRegexp(Regexp* a);
 
-  static Prefilter* FromString(const std::string& str);
+  static Prefilter* FromString(const re2::String& str);
 
   static Prefilter* OrStrings(SSet* ss);
 
@@ -147,10 +143,10 @@ class Prefilter {
   Op op_;
 
   // Sub-matches for AND or OR Prefilter.
-  std::vector<Prefilter*>* subs_;
+  re2::Vector<Prefilter*>* subs_;
 
   // Actual string to match in leaf node.
-  std::string atom_;
+  re2::String atom_;
 
   // If different prefilters have the same string atom, or if they are
   // structurally the same (e.g., OR of same atom strings) they are

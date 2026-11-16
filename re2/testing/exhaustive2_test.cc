@@ -4,6 +4,7 @@
 
 // Exhaustive testing of regular expression matching.
 
+#include "re2/testing/support.h"
 #include <stddef.h>
 
 #include <string>
@@ -24,8 +25,8 @@ TEST(EmptyString, Exhaustive) {
 
 // Test escaped versions of regexp syntax.
 TEST(Punctuation, Literals) {
-  std::vector<std::string> alphabet = Explode("()*+?{}[]\\^$.");
-  std::vector<std::string> escaped = alphabet;
+  re2::Vector<re2::String> alphabet = Explode("()*+?{}[]\\^$.");
+  re2::Vector<re2::String> escaped = alphabet;
   for (size_t i = 0; i < escaped.size(); i++)
     escaped[i] = "\\" + escaped[i];
   ExhaustiveTest(1, 1, escaped, RegexpGenerator::EgrepOps(),
@@ -63,7 +64,7 @@ TEST(LineEnds, Exhaustive) {
 // provides a mechanism, and RE2 could add new syntax if needed.
 //
 // TEST(Newlines, Exhaustive) {
-//   std::vector<std::string> empty_vector;
+//   re2::Vector<re2::String> empty_vector;
 //   ExhaustiveTest(1, 1, Split(" ", "\\n . a [^a]"),
 //                  RegexpGenerator::EgrepOps(),
 //                  4, Explode("a\n"), "");

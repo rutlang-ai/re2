@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "absl/base/macros.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/prog.h"
 #include "re2/regexp.h"
@@ -46,7 +46,7 @@ static PrefixTest tests[] = {
 };
 
 TEST(RequiredPrefix, SimpleTests) {
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(tests); i++) {
     const PrefixTest& t = tests[i];
     for (size_t j = 0; j < 2; j++) {
       Regexp::ParseFlags flags = Regexp::LikePerl;
@@ -55,18 +55,18 @@ TEST(RequiredPrefix, SimpleTests) {
       Regexp* re = Regexp::Parse(t.regexp, flags, NULL);
       ASSERT_TRUE(re != NULL) << " " << t.regexp;
 
-      std::string p;
+      re2::String p;
       bool f;
       Regexp* s;
       ASSERT_EQ(t.return_value, re->RequiredPrefix(&p, &f, &s))
         << " " << t.regexp << " " << (j == 0 ? "latin1" : "utf8")
         << " " << re->Dump();
       if (t.return_value) {
-        ASSERT_EQ(p, std::string(t.prefix))
+        ASSERT_EQ(p, re2::String(t.prefix))
           << " " << t.regexp << " " << (j == 0 ? "latin1" : "utf8");
         ASSERT_EQ(f, t.foldcase)
           << " " << t.regexp << " " << (j == 0 ? "latin1" : "utf8");
-        ASSERT_EQ(s->ToString(), std::string(t.suffix))
+        ASSERT_EQ(s->ToString(), re2::String(t.suffix))
           << " " << t.regexp << " " << (j == 0 ? "latin1" : "utf8");
         s->Decref();
       }
@@ -108,7 +108,7 @@ static PrefixTest for_accel_tests[] = {
 };
 
 TEST(RequiredPrefixForAccel, SimpleTests) {
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(for_accel_tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(for_accel_tests); i++) {
     const PrefixTest& t = for_accel_tests[i];
     for (size_t j = 0; j < 2; j++) {
       Regexp::ParseFlags flags = Regexp::LikePerl;
@@ -117,13 +117,13 @@ TEST(RequiredPrefixForAccel, SimpleTests) {
       Regexp* re = Regexp::Parse(t.regexp, flags, NULL);
       ASSERT_TRUE(re != NULL) << " " << t.regexp;
 
-      std::string p;
+      re2::String p;
       bool f;
       ASSERT_EQ(t.return_value, re->RequiredPrefixForAccel(&p, &f))
         << " " << t.regexp << " " << (j == 0 ? "latin1" : "utf8")
         << " " << re->Dump();
       if (t.return_value) {
-        ASSERT_EQ(p, std::string(t.prefix))
+        ASSERT_EQ(p, re2::String(t.prefix))
           << " " << t.regexp << " " << (j == 0 ? "latin1" : "utf8");
         ASSERT_EQ(f, t.foldcase)
           << " " << t.regexp << " " << (j == 0 ? "latin1" : "utf8");
@@ -135,7 +135,7 @@ TEST(RequiredPrefixForAccel, SimpleTests) {
 
 TEST(RequiredPrefixForAccel, CaseFoldingForKAndS) {
   Regexp* re;
-  std::string p;
+  re2::String p;
   bool f;
 
   // With Latin-1 encoding, `(?i)` prefixes can include 'k' and 's'.
@@ -173,7 +173,7 @@ static const char* prefix_accel_tests[] = {
 };
 
 TEST(PrefixAccel, SimpleTests) {
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(prefix_accel_tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(prefix_accel_tests); i++) {
     const char* pattern = prefix_accel_tests[i];
     Regexp* re = Regexp::Parse(pattern, Regexp::LikePerl, NULL);
     ASSERT_TRUE(re != NULL);
@@ -181,7 +181,7 @@ TEST(PrefixAccel, SimpleTests) {
     ASSERT_TRUE(prog != NULL);
     ASSERT_TRUE(prog->can_prefix_accel());
     for (int j = 0; j < 100; j++) {
-      std::string text(j, 'a');
+      re2::String text(j, 'a');
       const char* p = reinterpret_cast<const char*>(
           prog->PrefixAccel(text.data(), text.size()));
       EXPECT_TRUE(p == NULL);

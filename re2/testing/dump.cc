@@ -18,10 +18,7 @@
 
 #include <string>
 
-#include "absl/base/macros.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/str_format.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/regexp.h"
 #include "util/utf.h"
@@ -55,9 +52,9 @@ static const char* kOpcodeNames[] = {
 
 // Create string representation of regexp with explicit structure.
 // Nothing pretty, just for testing.
-static void DumpRegexpAppending(Regexp* re, std::string* s) {
-  if (re->op() < 0 || re->op() >= ABSL_ARRAYSIZE(kOpcodeNames)) {
-    *s += absl::StrFormat("op%d", re->op());
+static void DumpRegexpAppending(Regexp* re, re2::String* s) {
+  if (re->op() < 0 || re->op() >= RE2_ARRAYSIZE(kOpcodeNames)) {
+    *s += re2::internal::StrFormat("op%d", re->op());
   } else {
     switch (re->op()) {
       default:
@@ -130,7 +127,7 @@ static void DumpRegexpAppending(Regexp* re, std::string* s) {
       break;
     case kRegexpCapture:
       if (re->cap() == 0)
-        ABSL_LOG(DFATAL) << "kRegexpCapture cap() == 0";
+        RE2_LOG(DFATAL) << "kRegexpCapture cap() == 0";
       if (re->name()) {
         s->append(*re->name());
         s->append(":");
@@ -138,19 +135,19 @@ static void DumpRegexpAppending(Regexp* re, std::string* s) {
       DumpRegexpAppending(re->sub()[0], s);
       break;
     case kRegexpRepeat:
-      s->append(absl::StrFormat("%d,%d ", re->min(), re->max()));
+      s->append(re2::internal::StrFormat("%d,%d ", re->min(), re->max()));
       DumpRegexpAppending(re->sub()[0], s);
       break;
     case kRegexpCharClass: {
-      std::string sep;
+      re2::String sep;
       for (CharClass::iterator it = re->cc()->begin();
            it != re->cc()->end(); ++it) {
         RuneRange rr = *it;
         s->append(sep);
         if (rr.lo == rr.hi)
-          s->append(absl::StrFormat("%#x", rr.lo));
+          s->append(re2::internal::StrFormat("%#x", rr.lo));
         else
-          s->append(absl::StrFormat("%#x-%#x", rr.lo, rr.hi));
+          s->append(re2::internal::StrFormat("%#x-%#x", rr.lo, rr.hi));
         sep = " ";
       }
       break;
@@ -159,12 +156,12 @@ static void DumpRegexpAppending(Regexp* re, std::string* s) {
   s->append("}");
 }
 
-std::string Regexp::Dump() {
+re2::String Regexp::Dump() {
   // Make sure that we are being called from a unit test.
   // Should cause a link error if used outside of testing.
-  ABSL_CHECK(!::testing::TempDir().empty());
+  RE2_CHECK(!::testing::TempDir().empty());
 
-  std::string s;
+  re2::String s;
   DumpRegexpAppending(this, &s);
   return s;
 }

@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+#include "re2/support.h"
 #include "util/strutil.h"
 
 namespace re2 {
 
-void PrefixSuccessor(std::string* prefix) {
+void PrefixSuccessor(re2::String* prefix) {
   // We can increment the last character in the string and be done
   // unless that character is 255, in which case we have to erase the
   // last character and increment the previous character, unless that

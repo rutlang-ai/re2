@@ -11,8 +11,7 @@
 #include <string.h>
 #include <optional>
 
-#include "absl/base/macros.h"
-#include "absl/log/absl_log.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/re2.h"
 
@@ -89,7 +88,7 @@ const SuccessTable kSuccessTable[] = {
 { "18446744073709551616", 0,    { false, false, false, false, false, false }},
 };
 
-const int kNumStrings = ABSL_ARRAYSIZE(kSuccessTable);
+const int kNumStrings = RE2_ARRAYSIZE(kSuccessTable);
 
 // It's ugly to use a macro, but we apparently can't use the EXPECT_EQ
 // macro outside of a TEST block and this seems to be the only way to
@@ -138,7 +137,7 @@ TEST(RE2ArgTest, Uint64Test) {
 TEST(RE2ArgTest, ParseFromTest) {
   struct {
     bool ParseFrom(const char* str, size_t n) {
-      ABSL_LOG(INFO) << "str = " << str << ", n = " << n;
+      RE2_LOG(INFO) << "str = " << str << ", n = " << n;
       return true;
     }
   } obj1;
@@ -147,7 +146,7 @@ TEST(RE2ArgTest, ParseFromTest) {
 
   struct {
     bool ParseFrom(const char* str, size_t n) {
-      ABSL_LOG(INFO) << "str = " << str << ", n = " << n;
+      RE2_LOG(INFO) << "str = " << str << ", n = " << n;
       return false;
     }
     // Ensure that RE2::Arg works even with overloaded ParseFrom().
@@ -177,6 +176,26 @@ TEST(RE2ArgTest, OptionalIntWithCRadixTest) {
   EXPECT_TRUE(arg.Parse("0xb0e", 5));
   EXPECT_TRUE(opt.has_value());
   EXPECT_EQ(*opt, 2830);
+}
+
+TEST(RE2ArgTest, DecimalSignsAndBoundedInput) {
+  int value = 7;
+  RE2::Arg arg(&value);
+  EXPECT_TRUE(arg.Parse("+123x", 4));  // Not NUL-terminated at the match end.
+  EXPECT_EQ(value, 123);
+  EXPECT_TRUE(arg.Parse("-0", 2));
+  EXPECT_EQ(value, 0);
+  for (const char* bad : {"+", "++1", "+-1", " 1", "1 ", "1x"})
+    EXPECT_FALSE(arg.Parse(bad, strlen(bad))) << bad;
+  re2::String zeros(1000, '0');
+  zeros += "123";
+  EXPECT_TRUE(arg.Parse(zeros.data(), zeros.size()));
+  EXPECT_EQ(value, 123);
+  unsigned int unsigned_value = 0;
+  RE2::Arg unsigned_arg(&unsigned_value);
+  EXPECT_TRUE(unsigned_arg.Parse("+123", 4));
+  EXPECT_EQ(unsigned_value, 123u);
+  EXPECT_FALSE(unsigned_arg.Parse("-0", 2));
 }
 
 }  // namespace re2

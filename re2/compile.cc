@@ -11,13 +11,9 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <string>
 #include <utility>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/pod_array.h"
 #include "re2/prog.h"
 #include "re2/re2.h"
@@ -215,7 +211,7 @@ class Compiler : public Regexp::Walker<Frag> {
 
   int64_t max_mem_;    // Total memory budget.
 
-  absl::flat_hash_map<uint64_t, int> rune_cache_;
+  re2::internal::flat_hash_map<uint64_t, int> rune_cache_;
   Frag rune_range_;
 
   RE2::Anchor anchor_;  // anchor mode for RE2::Set
@@ -482,7 +478,7 @@ static uint64_t MakeRuneCacheKey(uint8_t lo, uint8_t hi, bool foldcase,
 int Compiler::CachedRuneByteSuffix(uint8_t lo, uint8_t hi, bool foldcase,
                                    int next) {
   uint64_t key = MakeRuneCacheKey(lo, hi, foldcase, next);
-  absl::flat_hash_map<uint64_t, int>::const_iterator it = rune_cache_.find(key);
+  re2::internal::flat_hash_map<uint64_t, int>::const_iterator it = rune_cache_.find(key);
   if (it != rune_cache_.end())
     return it->second;
   int id = UncachedRuneByteSuffix(lo, hi, foldcase, next);
@@ -525,7 +521,7 @@ void Compiler::AddSuffix(int id) {
 }
 
 int Compiler::AddSuffixRecursive(int root, int id) {
-  ABSL_DCHECK(inst_[root].opcode() == kInstAlt ||
+  RE2_DCHECK(inst_[root].opcode() == kInstAlt ||
               inst_[root].opcode() == kInstByteRange);
 
   Frag f = FindByteRange(root, id);
@@ -568,7 +564,7 @@ int Compiler::AddSuffixRecursive(int root, int id) {
   if (!IsCachedRuneByteSuffix(id)) {
     // The head should be the instruction most recently allocated, so free it
     // instead of leaving it unreachable.
-    ABSL_DCHECK_EQ(id, ninst_-1);
+    RE2_DCHECK_EQ(id, ninst_-1);
     inst_[id].out_opcode_ = 0;
     inst_[id].out1_ = 0;
     ninst_--;
@@ -616,7 +612,7 @@ Frag Compiler::FindByteRange(int root, int id) {
       return NoMatch();
   }
 
-  ABSL_LOG(DFATAL) << "should never happen";
+  RE2_LOG(DFATAL) << "should never happen";
   return NoMatch();
 }
 
@@ -741,7 +737,7 @@ void Compiler::AddRuneRangeUTF8(Rune lo, Rune hi, bool foldcase) {
   int n = runetochar(reinterpret_cast<char*>(ulo), &lo);
   int m = runetochar(reinterpret_cast<char*>(uhi), &hi);
   (void)m;  // USED(m)
-  ABSL_DCHECK_EQ(n, m);
+  RE2_DCHECK_EQ(n, m);
 
   // The logic below encodes this thinking:
   //
@@ -794,7 +790,7 @@ void Compiler::AddRuneRangeUTF8(Rune lo, Rune hi, bool foldcase) {
 Frag Compiler::Copy(Frag arg) {
   // We're using WalkExponential; there should be no copying.
   failed_ = true;
-  ABSL_LOG(DFATAL) << "Compiler::Copy called!";
+  RE2_LOG(DFATAL) << "Compiler::Copy called!";
   return NoMatch();
 }
 
@@ -921,7 +917,7 @@ Frag Compiler::PostVisit(Regexp* re, Frag, Frag, Frag* child_frags,
       if (cc->empty()) {
         // This can't happen.
         failed_ = true;
-        ABSL_LOG(DFATAL) << "No ranges in char class";
+        RE2_LOG(DFATAL) << "No ranges in char class";
         return NoMatch();
       }
 
@@ -979,7 +975,7 @@ Frag Compiler::PostVisit(Regexp* re, Frag, Frag, Frag* child_frags,
       return EmptyWidth(kEmptyNonWordBoundary);
   }
   failed_ = true;
-  ABSL_LOG(DFATAL) << "Missing case in Compiler: " << re->op();
+  RE2_LOG(DFATAL) << "Missing case in Compiler: " << re->op();
   return NoMatch();
 }
 
@@ -1178,7 +1174,7 @@ Prog* Compiler::Finish(Regexp* re) {
   prog_->ComputeByteMap();
 
   if (!prog_->reversed()) {
-    std::string prefix;
+    re2::String prefix;
     bool prefix_foldcase;
     if (re->RequiredPrefixForAccel(&prefix, &prefix_foldcase))
       prog_->ConfigurePrefixAccel(prefix, prefix_foldcase);
@@ -1247,7 +1243,7 @@ Prog* Compiler::CompileSet(Regexp* re, RE2::Anchor anchor, int64_t max_mem) {
   // Make sure DFA has enough memory to operate,
   // since we're not going to fall back to the NFA.
   bool dfa_failed = false;
-  absl::string_view sp = "hello, world";
+  re2::StringView sp = "hello, world";
   prog->SearchDFA(sp, sp, Prog::kAnchored, Prog::kManyMatch,
                   NULL, &dfa_failed, NULL);
   if (dfa_failed) {

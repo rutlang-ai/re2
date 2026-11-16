@@ -33,18 +33,13 @@
 #include <string>
 #include <vector>
 
-#include "absl/base/macros.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/escaping.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 #include "util/utf.h"
 
 namespace re2 {
 
 // Returns a vector of the egrep regexp operators.
-const std::vector<std::string>& RegexpGenerator::EgrepOps() {
+const re2::Vector<re2::String>& RegexpGenerator::EgrepOps() {
   static const char *ops[] = {
     "%s%s",
     "%s|%s",
@@ -53,13 +48,13 @@ const std::vector<std::string>& RegexpGenerator::EgrepOps() {
     "%s?",
     "%s\\C*",
   };
-  static std::vector<std::string> v(ops, ops + ABSL_ARRAYSIZE(ops));
+  static re2::Vector<re2::String> v(ops, ops + RE2_ARRAYSIZE(ops));
   return v;
 }
 
 RegexpGenerator::RegexpGenerator(int maxatoms, int maxops,
-                                 const std::vector<std::string>& atoms,
-                                 const std::vector<std::string>& ops)
+                                 const re2::Vector<re2::String>& atoms,
+                                 const re2::Vector<re2::String>& ops)
     : maxatoms_(maxatoms), maxops_(maxops), atoms_(atoms), ops_(ops) {
   // Degenerate case.
   if (atoms_.empty())
@@ -71,7 +66,7 @@ RegexpGenerator::RegexpGenerator(int maxatoms, int maxops,
 // Generates all possible regular expressions (within the parameters),
 // calling HandleRegexp for each one.
 void RegexpGenerator::Generate() {
-  std::vector<std::string> postfix;
+  re2::Vector<re2::String> postfix;
   GeneratePostfix(&postfix, 0, 0, 0);
 }
 
@@ -80,13 +75,13 @@ void RegexpGenerator::GenerateRandom(int32_t seed, int n) {
   rng_.seed(seed);
 
   for (int i = 0; i < n; i++) {
-    std::vector<std::string> postfix;
+    re2::Vector<re2::String> postfix;
     GenerateRandomPostfix(&postfix, 0, 0, 0);
   }
 }
 
 // Counts and returns the number of occurrences of "%s" in s.
-static int CountArgs(const std::string& s) {
+static int CountArgs(const re2::String& s) {
   const char *p = s.c_str();
   int n = 0;
   while ((p = strstr(p, "%s")) != NULL) {
@@ -109,7 +104,7 @@ static int CountArgs(const std::string& s) {
 //
 // The initial call should be GeneratePostfix([empty vector], 0, 0, 0).
 //
-void RegexpGenerator::GeneratePostfix(std::vector<std::string>* post,
+void RegexpGenerator::GeneratePostfix(re2::Vector<re2::String>* post,
                                       int nstk, int ops, int atoms) {
   if (nstk == 1)
     RunPostfix(*post);
@@ -132,7 +127,7 @@ void RegexpGenerator::GeneratePostfix(std::vector<std::string>* post,
   // Add operators if there are enough arguments.
   if (ops < maxops_) {
     for (size_t i = 0; i < ops_.size(); i++) {
-      const std::string& fmt = ops_[i];
+      const re2::String& fmt = ops_[i];
       int nargs = CountArgs(fmt);
       if (nargs <= nstk) {
         post->push_back(fmt);
@@ -145,7 +140,7 @@ void RegexpGenerator::GeneratePostfix(std::vector<std::string>* post,
 
 // Generates a random postfix command sequence.
 // Stops and returns true once a single sequence has been generated.
-bool RegexpGenerator::GenerateRandomPostfix(std::vector<std::string>* post,
+bool RegexpGenerator::GenerateRandomPostfix(re2::Vector<re2::String>* post,
                                             int nstk, int ops, int atoms) {
   std::uniform_int_distribution<int> random_stop(0, maxatoms_ - atoms);
   std::uniform_int_distribution<int> random_bit(0, 1);
@@ -169,7 +164,7 @@ bool RegexpGenerator::GenerateRandomPostfix(std::vector<std::string>* post,
 
     // Add operators if there are enough arguments.
     if (ops < maxops_ && random_bit(rng_) == 0) {
-      const std::string& fmt = ops_[random_ops_index(rng_)];
+      const re2::String& fmt = ops_[random_ops_index(rng_)];
       int nargs = CountArgs(fmt);
       if (nargs <= nstk) {
         post->push_back(fmt);
@@ -195,31 +190,31 @@ bool RegexpGenerator::GenerateRandomPostfix(std::vector<std::string>* post,
 // Interprets the postfix command sequence to create a regular expression
 // passed to HandleRegexp.  The results of operators like %s|%s are wrapped
 // in (?: ) to avoid needing to maintain a precedence table.
-void RegexpGenerator::RunPostfix(const std::vector<std::string>& post) {
-  std::stack<std::string> regexps;
+void RegexpGenerator::RunPostfix(const re2::Vector<re2::String>& post) {
+  std::stack<re2::String> regexps;
   for (size_t i = 0; i < post.size(); i++) {
     switch (CountArgs(post[i])) {
       default:
-        ABSL_LOG(FATAL) << "Bad operator: " << post[i];
+        RE2_LOG(FATAL) << "Bad operator: " << post[i];
       case 0:
         regexps.push(post[i]);
         break;
       case 1: {
-        auto fmt = absl::ParsedFormat<'s'>::New(post[i]);
-        ABSL_CHECK(fmt != nullptr);
-        std::string a = regexps.top();
+        auto fmt = re2::internal::ParsedFormat<'s'>::New(post[i]);
+        RE2_CHECK(fmt != nullptr);
+        re2::String a = regexps.top();
         regexps.pop();
-        regexps.push("(?:" + absl::StrFormat(*fmt, a) + ")");
+        regexps.push("(?:" + re2::internal::StrFormat(*fmt, a) + ")");
         break;
       }
       case 2: {
-        auto fmt = absl::ParsedFormat<'s', 's'>::New(post[i]);
-        ABSL_CHECK(fmt != nullptr);
-        std::string b = regexps.top();
+        auto fmt = re2::internal::ParsedFormat<'s', 's'>::New(post[i]);
+        RE2_CHECK(fmt != nullptr);
+        re2::String b = regexps.top();
         regexps.pop();
-        std::string a = regexps.top();
+        re2::String a = regexps.top();
         regexps.pop();
-        regexps.push("(?:" + absl::StrFormat(*fmt, a, b) + ")");
+        regexps.push("(?:" + re2::internal::StrFormat(*fmt, a, b) + ")");
         break;
       }
     }
@@ -227,16 +222,16 @@ void RegexpGenerator::RunPostfix(const std::vector<std::string>& post) {
 
   if (regexps.size() != 1) {
     // Internal error - should never happen.
-    absl::PrintF("Bad regexp program:\n");
+    re2::internal::PrintF("Bad regexp program:\n");
     for (size_t i = 0; i < post.size(); i++) {
-      absl::PrintF("  %s\n", absl::CEscape(post[i]));
+      re2::internal::PrintF("  %s\n", re2::internal::CEscape(post[i]));
     }
-    absl::PrintF("Stack after running program:\n");
+    re2::internal::PrintF("Stack after running program:\n");
     while (!regexps.empty()) {
-      absl::PrintF("  %s\n", absl::CEscape(regexps.top()));
+      re2::internal::PrintF("  %s\n", re2::internal::CEscape(regexps.top()));
       regexps.pop();
     }
-    ABSL_LOG(FATAL) << "Bad regexp program.";
+    RE2_LOG(FATAL) << "Bad regexp program.";
   }
 
   HandleRegexp(regexps.top());
@@ -246,14 +241,14 @@ void RegexpGenerator::RunPostfix(const std::vector<std::string>& post) {
 }
 
 // Split s into an vector of strings, one for each UTF-8 character.
-std::vector<std::string> Explode(absl::string_view s) {
-  std::vector<std::string> v;
+re2::Vector<re2::String> Explode(re2::StringView s) {
+  re2::Vector<re2::String> v;
 
   for (const char *q = s.data(); q < s.data() + s.size(); ) {
     const char* p = q;
     Rune r;
     q += chartorune(&r, q);
-    v.push_back(std::string(p, q - p));
+    v.push_back(re2::String(p, q - p));
   }
 
   return v;
@@ -261,23 +256,23 @@ std::vector<std::string> Explode(absl::string_view s) {
 
 // Split string everywhere a substring is found, returning
 // vector of pieces.
-std::vector<std::string> Split(absl::string_view sep, absl::string_view s) {
-  std::vector<std::string> v;
+re2::Vector<re2::String> Split(re2::StringView sep, re2::StringView s) {
+  re2::Vector<re2::String> v;
 
   if (sep.empty())
     return Explode(s);
 
   const char *p = s.data();
   for (const char *q = s.data(); q + sep.size() <= s.data() + s.size(); q++) {
-    if (absl::string_view(q, sep.size()) == sep) {
-      v.push_back(std::string(p, q - p));
+    if (re2::StringView(q, sep.size()) == sep) {
+      v.push_back(re2::String(p, q - p));
       p = q + sep.size();
       q = p - 1;  // -1 for ++ in loop
       continue;
     }
   }
   if (p < s.data() + s.size())
-    v.push_back(std::string(p, s.data() + s.size() - p));
+    v.push_back(re2::String(p, s.data() + s.size() - p));
   return v;
 }
 

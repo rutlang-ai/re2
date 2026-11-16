@@ -8,8 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
+#include "re2/support.h"
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -30,16 +29,16 @@ class Bitmap256 {
 
   // Tests the bit with index c.
   bool Test(int c) const {
-    ABSL_DCHECK_GE(c, 0);
-    ABSL_DCHECK_LE(c, 255);
+    RE2_DCHECK_GE(c, 0);
+    RE2_DCHECK_LE(c, 255);
 
     return (words_[c / 64] & (uint64_t{1} << (c % 64))) != 0;
   }
 
   // Sets the bit with index c.
   void Set(int c) {
-    ABSL_DCHECK_GE(c, 0);
-    ABSL_DCHECK_LE(c, 255);
+    RE2_DCHECK_GE(c, 0);
+    RE2_DCHECK_LE(c, 255);
 
     words_[c / 64] |= (uint64_t{1} << (c % 64));
   }
@@ -51,7 +50,7 @@ class Bitmap256 {
  private:
   // Finds the least significant non-zero bit in n.
   static int FindLSBSet(uint64_t n) {
-    ABSL_DCHECK_NE(n, uint64_t{0});
+    RE2_DCHECK_NE(n, uint64_t{0});
 #if defined(__GNUC__)
     return __builtin_ctzll(n);
 #elif defined(_MSC_VER) && defined(_M_X64)

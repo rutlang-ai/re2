@@ -8,9 +8,7 @@
 
 #include <string>
 
-#include "absl/base/macros.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/prog.h"
 #include "re2/regexp.h"
@@ -131,27 +129,27 @@ static Test tests[] = {
 
 TEST(TestRegexpCompileToProg, Simple) {
   int failed = 0;
-  for (size_t i = 0; i < ABSL_ARRAYSIZE(tests); i++) {
+  for (size_t i = 0; i < RE2_ARRAYSIZE(tests); i++) {
     const re2::Test& t = tests[i];
     Regexp* re = Regexp::Parse(t.regexp, Regexp::PerlX|Regexp::Latin1, NULL);
     if (re == NULL) {
-      ABSL_LOG(ERROR) << "Cannot parse: " << t.regexp;
+      RE2_LOG(ERROR) << "Cannot parse: " << t.regexp;
       failed++;
       continue;
     }
     Prog* prog = re->CompileToProg(0);
     if (prog == NULL) {
-      ABSL_LOG(ERROR) << "Cannot compile: " << t.regexp;
+      RE2_LOG(ERROR) << "Cannot compile: " << t.regexp;
       re->Decref();
       failed++;
       continue;
     }
     ASSERT_TRUE(re->CompileToProg(1) == NULL);
-    std::string s = prog->Dump();
+    re2::String s = prog->Dump();
     if (s != t.code) {
-      ABSL_LOG(ERROR) << "Incorrect compiled code for: " << t.regexp;
-      ABSL_LOG(ERROR) << "Want:\n" << t.code;
-      ABSL_LOG(ERROR) << "Got:\n" << s;
+      RE2_LOG(ERROR) << "Incorrect compiled code for: " << t.regexp;
+      RE2_LOG(ERROR) << "Want:\n" << t.code;
+      RE2_LOG(ERROR) << "Got:\n" << s;
       failed++;
     }
     delete prog;
@@ -160,8 +158,8 @@ TEST(TestRegexpCompileToProg, Simple) {
   EXPECT_EQ(failed, 0);
 }
 
-static void DumpByteMap(absl::string_view pattern, Regexp::ParseFlags flags,
-                        std::string* bytemap) {
+static void DumpByteMap(re2::StringView pattern, Regexp::ParseFlags flags,
+                        re2::String* bytemap) {
   Regexp* re = Regexp::Parse(pattern, flags, NULL);
   EXPECT_TRUE(re != NULL);
 
@@ -185,7 +183,7 @@ static void DumpByteMap(absl::string_view pattern, Regexp::ParseFlags flags,
 TEST(TestCompile, Latin1Ranges) {
   // The distinct byte ranges involved in the Latin-1 dot ([^\n]).
 
-  std::string bytemap;
+  re2::String bytemap;
 
   DumpByteMap(".", Regexp::PerlX|Regexp::Latin1, &bytemap);
   EXPECT_EQ("[00-09] -> 0\n"
@@ -195,7 +193,7 @@ TEST(TestCompile, Latin1Ranges) {
 }
 
 TEST(TestCompile, OtherByteMapTests) {
-  std::string bytemap;
+  re2::String bytemap;
 
   // Test that "absent" ranges are mapped to the same byte class.
   DumpByteMap("[0-9A-Fa-f]+", Regexp::PerlX|Regexp::Latin1, &bytemap);
@@ -234,7 +232,7 @@ TEST(TestCompile, UTF8Ranges) {
   // Once, erroneously split between 0x3f and 0x40 because it is
   // a 6-bit boundary.
 
-  std::string bytemap;
+  re2::String bytemap;
 
   DumpByteMap(".", Regexp::PerlX, &bytemap);
   EXPECT_EQ("[00-09] -> 0\n"
@@ -261,8 +259,8 @@ TEST(TestCompile, InsufficientMemory) {
   re->Decref();
 }
 
-static void Dump(absl::string_view pattern, Regexp::ParseFlags flags,
-                 std::string* forward, std::string* reverse) {
+static void Dump(re2::StringView pattern, Regexp::ParseFlags flags,
+                 re2::String* forward, re2::String* reverse) {
   Regexp* re = Regexp::Parse(pattern, flags, NULL);
   EXPECT_TRUE(re != NULL);
 
@@ -287,7 +285,7 @@ TEST(TestCompile, Bug26705922) {
   // Bug in the compiler caused inefficient bytecode to be generated for Unicode
   // groups: common suffixes were cached, but common prefixes were not factored.
 
-  std::string forward, reverse;
+  re2::String forward, reverse;
 
   Dump("[\\x{10000}\\x{10010}]", Regexp::LikePerl, &forward, &reverse);
   EXPECT_EQ("3. byte [f0-f0] 0 -> 4\n"
@@ -344,7 +342,7 @@ TEST(TestCompile, Bug35237384) {
   // Bug in the compiler caused inefficient bytecode to be generated for
   // nested nullable subexpressions.
 
-  std::string forward;
+  re2::String forward;
 
   Dump("a**{3,}", Regexp::Latin1|Regexp::NeverCapture, &forward, NULL);
   EXPECT_EQ("3+ byte [61-61] 1 -> 3\n"

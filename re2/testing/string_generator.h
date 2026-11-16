@@ -15,16 +15,16 @@
 #include <string>
 #include <vector>
 
-#include "absl/strings/string_view.h"
+#include "re2/testing/support.h"
 
 namespace re2 {
 
 class StringGenerator {
  public:
-  StringGenerator(int maxlen, const std::vector<std::string>& alphabet);
+  StringGenerator(int maxlen, const re2::Vector<re2::String>& alphabet);
   ~StringGenerator() {}
 
-  absl::string_view Next();
+  re2::StringView Next();
   bool HasNext() { return hasnext_; }
 
   // Resets generator to start sequence over.
@@ -42,13 +42,13 @@ class StringGenerator {
 
   // Global state.
   int maxlen_;                         // Maximum length string to generate.
-  std::vector<std::string> alphabet_;  // Alphabet, one string per letter.
+  re2::Vector<re2::String> alphabet_;  // Alphabet, one string per letter.
 
   // Iteration state.
-  absl::string_view sp_;     // Last string_view returned by Next().
-  std::string s_;            // String data in last string_view returned by Next().
+  re2::StringView sp_;     // Last string_view returned by Next().
+  re2::String s_;            // String data in last string_view returned by Next().
   bool hasnext_;             // Whether Next() can be called again.
-  std::vector<int> digits_;  // Alphabet indices for next string.
+  re2::Vector<int> digits_;  // Alphabet indices for next string.
   bool generate_null_;       // Whether to generate a NULL string_view next.
   bool random_;              // Whether generated strings are random.
   int nrandom_;              // Number of random strings left to generate.
@@ -69,7 +69,7 @@ class StringGenerator {
 // DeBruijn string causes the DFA to need to create a new state at every
 // position in the input, never reusing any states until it gets to the
 // end of the string.  This is the worst possible case for DFA execution.
-std::string DeBruijnString(int n);
+re2::String DeBruijnString(int n);
 
 }  // namespace re2
 

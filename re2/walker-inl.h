@@ -15,9 +15,7 @@
 
 #include <stack>
 
-#include "absl/base/macros.h"
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
+#include "re2/support.h"
 #include "re2/regexp.h"
 
 namespace re2 {
@@ -91,7 +89,7 @@ template<typename T> class Regexp::Walker {
 
  private:
   // Walk state for the entire traversal.
-  std::stack<WalkState<T>> stack_;
+  std::stack<WalkState<T>, re2::Vector<WalkState<T>>> stack_;
   bool stopped_early_;
   int max_visits_;
 
@@ -148,7 +146,7 @@ template<typename T> Regexp::Walker<T>::~Walker() {
 // Logs DFATAL if stack is not already clear.
 template<typename T> void Regexp::Walker<T>::Reset() {
   if (!stack_.empty()) {
-    ABSL_LOG(DFATAL) << "Stack not empty.";
+    RE2_LOG(DFATAL) << "Stack not empty.";
     while (!stack_.empty()) {
       if (stack_.top().re->nsub_ > 1)
         delete[] stack_.top().child_args;
@@ -162,7 +160,7 @@ template<typename T> T Regexp::Walker<T>::WalkInternal(Regexp* re, T top_arg,
   Reset();
 
   if (re == NULL) {
-    ABSL_LOG(DFATAL) << "Walk NULL";
+    RE2_LOG(DFATAL) << "Walk NULL";
     return top_arg;
   }
 
@@ -188,9 +186,7 @@ template<typename T> T Regexp::Walker<T>::WalkInternal(Regexp* re, T top_arg,
         }
         s->n = 0;
         s->child_args = NULL;
-        if (re->nsub_ == 1)
-          s->child_args = &s->child_arg;
-        else if (re->nsub_ > 1)
+        if (re->nsub_ > 1)
           s->child_args = new T[re->nsub_];
         [[fallthrough]];
       }
@@ -208,7 +204,8 @@ template<typename T> T Regexp::Walker<T>::WalkInternal(Regexp* re, T top_arg,
           }
         }
 
-        t = PostVisit(re, s->parent_arg, s->pre_arg, s->child_args, s->n);
+        t = PostVisit(re, s->parent_arg, s->pre_arg,
+                      re->nsub_ == 1 ? &s->child_arg : s->child_args, s->n);
         if (re->nsub_ > 1)
           delete[] s->child_args;
         break;

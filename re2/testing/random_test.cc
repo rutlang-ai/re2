@@ -7,16 +7,15 @@
 #include <string>
 #include <vector>
 
-#include "absl/flags/flag.h"
-#include "absl/strings/str_format.h"
+#include "re2/testing/support.h"
 #include "gtest/gtest.h"
 #include "re2/testing/exhaustive_tester.h"
 #include "re2/testing/regexp_generator.h"
 
-ABSL_FLAG(int, regexpseed, 404, "Random regexp seed.");
-ABSL_FLAG(int, regexpcount, 100, "How many random regexps to generate.");
-ABSL_FLAG(int, stringseed, 200, "Random string seed.");
-ABSL_FLAG(int, stringcount, 100, "How many random strings to generate.");
+RE2_FLAG(int, regexpseed, 404, "Random regexp seed.");
+RE2_FLAG(int, regexpcount, 100, "How many random regexps to generate.");
+RE2_FLAG(int, stringseed, 200, "Random string seed.");
+RE2_FLAG(int, stringcount, 100, "How many random strings to generate.");
 
 namespace re2 {
 
@@ -24,11 +23,11 @@ namespace re2 {
 // (Always uses the same random seeds for reproducibility.
 // Can give different seeds on command line.)
 static void RandomTest(int maxatoms, int maxops,
-                       const std::vector<std::string>& alphabet,
-                       const std::vector<std::string>& ops,
+                       const re2::Vector<re2::String>& alphabet,
+                       const re2::Vector<re2::String>& ops,
                        int maxstrlen,
-                       const std::vector<std::string>& stralphabet,
-                       const std::string& wrapper) {
+                       const re2::Vector<re2::String>& stralphabet,
+                       const re2::String& wrapper) {
   // Limit to smaller test cases in debug mode,
   // because everything is so much slower.
   if (RE2_DEBUG_MODE) {
@@ -39,11 +38,11 @@ static void RandomTest(int maxatoms, int maxops,
 
   ExhaustiveTester t(maxatoms, maxops, alphabet, ops,
                      maxstrlen, stralphabet, wrapper, "");
-  t.RandomStrings(absl::GetFlag(FLAGS_stringseed),
-                  absl::GetFlag(FLAGS_stringcount));
-  t.GenerateRandom(absl::GetFlag(FLAGS_regexpseed),
-                   absl::GetFlag(FLAGS_regexpcount));
-  absl::PrintF("%d regexps, %d tests, %d failures [%d/%d str]\n",
+  t.RandomStrings(re2::internal::GetFlag(FLAGS_stringseed),
+                  re2::internal::GetFlag(FLAGS_stringcount));
+  t.GenerateRandom(re2::internal::GetFlag(FLAGS_regexpseed),
+                   re2::internal::GetFlag(FLAGS_regexpcount));
+  re2::internal::PrintF("%d regexps, %d tests, %d failures [%d/%d str]\n",
                t.regexps(), t.tests(), t.failures(), maxstrlen, stralphabet.size());
   EXPECT_EQ(0, t.failures());
 }
@@ -83,7 +82,7 @@ TEST(Random, BigEgrepCaptures) {
 // character classes like \d.  (Adding larger character classes would
 // make for too many possibilities.)
 TEST(Random, Complicated) {
-  std::vector<std::string> ops = Split(" ",
+  re2::Vector<re2::String> ops = Split(" ",
     "%s%s %s|%s %s* %s*? %s+ %s+? %s? %s?? "
     "%s{0} %s{0,} %s{1} %s{1,} %s{0,1} %s{0,2} %s{1,2} "
     "%s{2} %s{2,} %s{3,4} %s{4,5}");
@@ -91,11 +90,11 @@ TEST(Random, Complicated) {
   // Use (?:\b) and (?:\B) instead of \b and \B,
   // because PCRE rejects \b* but accepts (?:\b)*.
   // Ditto ^ and $.
-  std::vector<std::string> atoms = Split(" ",
+  re2::Vector<re2::String> atoms = Split(" ",
     ". (?:^) (?:$) \\a \\f \\n \\r \\t \\v "
     "\\d \\D \\s \\S \\w \\W (?:\\b) (?:\\B) "
     "a (a) b c - \\\\");
-  std::vector<std::string> alphabet = Explode("abc123\001\002\003\t\r\n\v\f\a");
+  re2::Vector<re2::String> alphabet = Explode("abc123\001\002\003\t\r\n\v\f\a");
   RandomTest(10, 10, atoms, ops, 20, alphabet, "");
 }
 

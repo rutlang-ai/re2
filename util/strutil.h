@@ -5,11 +5,11 @@
 #ifndef UTIL_STRUTIL_H_
 #define UTIL_STRUTIL_H_
 
-#include <string>
+#include "re2/support.h"
 
 namespace re2 {
 
-void PrefixSuccessor(std::string* prefix);
+void PrefixSuccessor(re2::String* prefix);
 
 }  // namespace re2
 

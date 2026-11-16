@@ -6,12 +6,9 @@
 
 #include <stddef.h>
 
-#include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/log/absl_log.h"
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/prefilter.h"
 #include "re2/prefilter_tree.h"
 
@@ -48,14 +45,14 @@ FilteredRE2& FilteredRE2::operator=(FilteredRE2&& other) {
   return *this;
 }
 
-RE2::ErrorCode FilteredRE2::Add(absl::string_view pattern,
+RE2::ErrorCode FilteredRE2::Add(re2::StringView pattern,
                                 const RE2::Options& options, int* id) {
   RE2* re = new RE2(pattern, options);
   RE2::ErrorCode code = re->error_code();
 
   if (!re->ok()) {
     if (options.log_errors()) {
-      ABSL_LOG(ERROR) << "Couldn't compile regular expression, skipping: "
+      RE2_LOG(ERROR) << "Couldn't compile regular expression, skipping: "
                       << pattern << " due to error " << re->error();
     }
     delete re;
@@ -67,9 +64,9 @@ RE2::ErrorCode FilteredRE2::Add(absl::string_view pattern,
   return code;
 }
 
-void FilteredRE2::Compile(std::vector<std::string>* atoms) {
+void FilteredRE2::Compile(re2::Vector<re2::String>* atoms) {
   if (compiled_) {
-    ABSL_LOG(ERROR) << "Compile called already.";
+    RE2_LOG(ERROR) << "Compile called already.";
     return;
   }
 
@@ -88,20 +85,20 @@ void FilteredRE2::Compile(std::vector<std::string>* atoms) {
   compiled_ = true;
 }
 
-int FilteredRE2::SlowFirstMatch(absl::string_view text) const {
+int FilteredRE2::SlowFirstMatch(re2::StringView text) const {
   for (size_t i = 0; i < re2_vec_.size(); i++)
     if (RE2::PartialMatch(text, *re2_vec_[i]))
       return static_cast<int>(i);
   return -1;
 }
 
-int FilteredRE2::FirstMatch(absl::string_view text,
-                            const std::vector<int>& atoms) const {
+int FilteredRE2::FirstMatch(re2::StringView text,
+                            const re2::Vector<int>& atoms) const {
   if (!compiled_) {
-    ABSL_LOG(DFATAL) << "FirstMatch called before Compile.";
+    RE2_LOG(DFATAL) << "FirstMatch called before Compile.";
     return -1;
   }
-  std::vector<int> regexps;
+  re2::Vector<int> regexps;
   prefilter_tree_->RegexpsGivenStrings(atoms, &regexps);
   for (size_t i = 0; i < regexps.size(); i++)
     if (RE2::PartialMatch(text, *re2_vec_[regexps[i]]))
@@ -109,11 +106,11 @@ int FilteredRE2::FirstMatch(absl::string_view text,
   return -1;
 }
 
-bool FilteredRE2::AllMatches(absl::string_view text,
-                             const std::vector<int>& atoms,
-                             std::vector<int>* matching_regexps) const {
+bool FilteredRE2::AllMatches(re2::StringView text,
+                             const re2::Vector<int>& atoms,
+                             re2::Vector<int>* matching_regexps) const {
   matching_regexps->clear();
-  std::vector<int> regexps;
+  re2::Vector<int> regexps;
   prefilter_tree_->RegexpsGivenStrings(atoms, &regexps);
   for (size_t i = 0; i < regexps.size(); i++)
     if (RE2::PartialMatch(text, *re2_vec_[regexps[i]]))
@@ -121,13 +118,13 @@ bool FilteredRE2::AllMatches(absl::string_view text,
   return !matching_regexps->empty();
 }
 
-void FilteredRE2::AllPotentials(const std::vector<int>& atoms,
-                                std::vector<int>* potential_regexps) const {
+void FilteredRE2::AllPotentials(const re2::Vector<int>& atoms,
+                                re2::Vector<int>* potential_regexps) const {
   prefilter_tree_->RegexpsGivenStrings(atoms, potential_regexps);
 }
 
-void FilteredRE2::RegexpsGivenStrings(const std::vector<int>& matched_atoms,
-                                      std::vector<int>* passed_regexps) {
+void FilteredRE2::RegexpsGivenStrings(const re2::Vector<int>& matched_atoms,
+                                      re2::Vector<int>* passed_regexps) {
   prefilter_tree_->RegexpsGivenStrings(matched_atoms, passed_regexps);
 }
 

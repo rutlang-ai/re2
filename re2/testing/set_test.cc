@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+#include "re2/testing/support.h"
 #include "re2/set.h"
 
 #include <stddef.h>
@@ -31,7 +32,7 @@ TEST(Set, Unanchored) {
   ASSERT_EQ(s.Match("fooba", NULL), true);
   ASSERT_EQ(s.Match("oobar", NULL), true);
 
-  std::vector<int> v;
+  re2::Vector<int> v;
   ASSERT_EQ(s.Match("foobar", &v), true);
   ASSERT_EQ(v.size(), size_t{2});
   ASSERT_EQ(v[0], 0);
@@ -59,7 +60,7 @@ TEST(Set, UnanchoredFactored) {
   ASSERT_EQ(s.Match("fooba", NULL), true);
   ASSERT_EQ(s.Match("oobar", NULL), false);
 
-  std::vector<int> v;
+  re2::Vector<int> v;
   ASSERT_EQ(s.Match("foobar", &v), true);
   ASSERT_EQ(v.size(), size_t{2});
   ASSERT_EQ(v[0], 0);
@@ -87,7 +88,7 @@ TEST(Set, UnanchoredDollar) {
   ASSERT_EQ(s.Match("foo", NULL), true);
   ASSERT_EQ(s.Match("foobar", NULL), false);
 
-  std::vector<int> v;
+  re2::Vector<int> v;
   ASSERT_EQ(s.Match("foo", &v), true);
   ASSERT_EQ(v.size(), size_t{1});
   ASSERT_EQ(v[0], 0);
@@ -106,7 +107,7 @@ TEST(Set, UnanchoredWordBoundary) {
   ASSERT_EQ(s.Match("foobar", NULL), false);
   ASSERT_EQ(s.Match("foo bar", NULL), true);
 
-  std::vector<int> v;
+  re2::Vector<int> v;
   ASSERT_EQ(s.Match("foo", &v), true);
   ASSERT_EQ(v.size(), size_t{1});
   ASSERT_EQ(v[0], 0);
@@ -133,7 +134,7 @@ TEST(Set, Anchored) {
   ASSERT_EQ(s.Match("foo", NULL), true);
   ASSERT_EQ(s.Match("bar", NULL), true);
 
-  std::vector<int> v;
+  re2::Vector<int> v;
   ASSERT_EQ(s.Match("foobar", &v), false);
   ASSERT_EQ(v.size(), size_t{0});
 
@@ -160,7 +161,7 @@ TEST(Set, EmptyUnanchored) {
   ASSERT_EQ(s.Match("", NULL), false);
   ASSERT_EQ(s.Match("foobar", NULL), false);
 
-  std::vector<int> v;
+  re2::Vector<int> v;
   ASSERT_EQ(s.Match("", &v), false);
   ASSERT_EQ(v.size(), size_t{0});
 
@@ -176,7 +177,7 @@ TEST(Set, EmptyAnchored) {
   ASSERT_EQ(s.Match("", NULL), false);
   ASSERT_EQ(s.Match("foobar", NULL), false);
 
-  std::vector<int> v;
+  re2::Vector<int> v;
   ASSERT_EQ(s.Match("", &v), false);
   ASSERT_EQ(v.size(), size_t{0});
 
@@ -194,7 +195,7 @@ TEST(Set, Prefix) {
   ASSERT_EQ(s.Match("/prefix/", NULL), true);
   ASSERT_EQ(s.Match("/prefix/42", NULL), true);
 
-  std::vector<int> v;
+  re2::Vector<int> v;
   ASSERT_EQ(s.Match("/prefix", &v), false);
   ASSERT_EQ(v.size(), size_t{0});
 

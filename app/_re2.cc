@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+#include "re2/support.h"
 #include <memory>
 #include <string>
 
@@ -40,7 +41,7 @@ Info GetInfo(const std::string& pattern) {
     return info;
   }
 
-  std::string prefix;
+  re2::String prefix;
   bool prefix_foldcase;
   re2::Regexp* suffix;
   if (regexp->RequiredPrefix(&prefix, &prefix_foldcase, &suffix)) {

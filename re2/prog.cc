@@ -11,14 +11,9 @@
 #include <string.h>
 
 #include <algorithm>
-#include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
+#include "re2/support.h"
 #include "re2/bitmap256.h"
 #include "re2/pod_array.h"
 #include "re2/sparse_array.h"
@@ -36,13 +31,13 @@ namespace re2 {
 // Constructors per Inst opcode
 
 void Prog::Inst::InitAlt(uint32_t out, uint32_t out1) {
-  ABSL_DCHECK_EQ(out_opcode_, uint32_t{0});
+  RE2_DCHECK_EQ(out_opcode_, uint32_t{0});
   set_out_opcode(out, kInstAlt);
   out1_ = out1;
 }
 
 void Prog::Inst::InitByteRange(int lo, int hi, int foldcase, uint32_t out) {
-  ABSL_DCHECK_EQ(out_opcode_, uint32_t{0});
+  RE2_DCHECK_EQ(out_opcode_, uint32_t{0});
   set_out_opcode(out, kInstByteRange);
   lo_ = lo & 0xFF;
   hi_ = hi & 0xFF;
@@ -50,64 +45,64 @@ void Prog::Inst::InitByteRange(int lo, int hi, int foldcase, uint32_t out) {
 }
 
 void Prog::Inst::InitCapture(int cap, uint32_t out) {
-  ABSL_DCHECK_EQ(out_opcode_, uint32_t{0});
+  RE2_DCHECK_EQ(out_opcode_, uint32_t{0});
   set_out_opcode(out, kInstCapture);
   cap_ = cap;
 }
 
 void Prog::Inst::InitEmptyWidth(EmptyOp empty, uint32_t out) {
-  ABSL_DCHECK_EQ(out_opcode_, uint32_t{0});
+  RE2_DCHECK_EQ(out_opcode_, uint32_t{0});
   set_out_opcode(out, kInstEmptyWidth);
   empty_ = empty;
 }
 
 void Prog::Inst::InitMatch(int32_t id) {
-  ABSL_DCHECK_EQ(out_opcode_, uint32_t{0});
+  RE2_DCHECK_EQ(out_opcode_, uint32_t{0});
   set_opcode(kInstMatch);
   match_id_ = id;
 }
 
 void Prog::Inst::InitNop(uint32_t out) {
-  ABSL_DCHECK_EQ(out_opcode_, uint32_t{0});
+  RE2_DCHECK_EQ(out_opcode_, uint32_t{0});
   set_opcode(kInstNop);
 }
 
 void Prog::Inst::InitFail() {
-  ABSL_DCHECK_EQ(out_opcode_, uint32_t{0});
+  RE2_DCHECK_EQ(out_opcode_, uint32_t{0});
   set_opcode(kInstFail);
 }
 
-std::string Prog::Inst::Dump() {
+re2::String Prog::Inst::Dump() {
   switch (opcode()) {
     default:
-      return absl::StrFormat("opcode %d", static_cast<int>(opcode()));
+      return re2::internal::StrFormat("opcode %d", static_cast<int>(opcode()));
 
     case kInstAlt:
-      return absl::StrFormat("alt -> %d | %d", out(), out1_);
+      return re2::internal::StrFormat("alt -> %d | %d", out(), out1_);
 
     case kInstAltMatch:
-      return absl::StrFormat("altmatch -> %d | %d", out(), out1_);
+      return re2::internal::StrFormat("altmatch -> %d | %d", out(), out1_);
 
     case kInstByteRange:
-      return absl::StrFormat("byte%s [%02x-%02x] %d -> %d",
+      return re2::internal::StrFormat("byte%s [%02x-%02x] %d -> %d",
                              foldcase() ? "/i" : "",
                              lo_, hi_, hint(), out());
 
     case kInstCapture:
-      return absl::StrFormat("capture %d -> %d", cap_, out());
+      return re2::internal::StrFormat("capture %d -> %d", cap_, out());
 
     case kInstEmptyWidth:
-      return absl::StrFormat("emptywidth %#x -> %d",
+      return re2::internal::StrFormat("emptywidth %#x -> %d",
                              static_cast<int>(empty_), out());
 
     case kInstMatch:
-      return absl::StrFormat("match! %d", match_id());
+      return re2::internal::StrFormat("match! %d", match_id());
 
     case kInstNop:
-      return absl::StrFormat("nop -> %d", out());
+      return re2::internal::StrFormat("nop -> %d", out());
 
     case kInstFail:
-      return absl::StrFormat("fail");
+      return re2::internal::StrFormat("fail");
   }
 }
 
@@ -144,12 +139,12 @@ static inline void AddToQueue(Workq* q, int id) {
     q->insert(id);
 }
 
-static std::string ProgToString(Prog* prog, Workq* q) {
-  std::string s;
+static re2::String ProgToString(Prog* prog, Workq* q) {
+  re2::String s;
   for (Workq::iterator i = q->begin(); i != q->end(); ++i) {
     int id = *i;
     Prog::Inst* ip = prog->inst(id);
-    s += absl::StrFormat("%d. %s\n", id, ip->Dump());
+    s += re2::internal::StrFormat("%d. %s\n", id, ip->Dump());
     AddToQueue(q, ip->out());
     if (ip->opcode() == kInstAlt || ip->opcode() == kInstAltMatch)
       AddToQueue(q, ip->out1());
@@ -157,19 +152,19 @@ static std::string ProgToString(Prog* prog, Workq* q) {
   return s;
 }
 
-static std::string FlattenedProgToString(Prog* prog, int start) {
-  std::string s;
+static re2::String FlattenedProgToString(Prog* prog, int start) {
+  re2::String s;
   for (int id = start; id < prog->size(); id++) {
     Prog::Inst* ip = prog->inst(id);
     if (ip->last())
-      s += absl::StrFormat("%d. %s\n", id, ip->Dump());
+      s += re2::internal::StrFormat("%d. %s\n", id, ip->Dump());
     else
-      s += absl::StrFormat("%d+ %s\n", id, ip->Dump());
+      s += re2::internal::StrFormat("%d+ %s\n", id, ip->Dump());
   }
   return s;
 }
 
-std::string Prog::Dump() {
+re2::String Prog::Dump() {
   if (did_flatten_)
     return FlattenedProgToString(this, start_);
 
@@ -178,7 +173,7 @@ std::string Prog::Dump() {
   return ProgToString(this, &q);
 }
 
-std::string Prog::DumpUnanchored() {
+re2::String Prog::DumpUnanchored() {
   if (did_flatten_)
     return FlattenedProgToString(this, start_unanchored_);
 
@@ -187,15 +182,15 @@ std::string Prog::DumpUnanchored() {
   return ProgToString(this, &q);
 }
 
-std::string Prog::DumpByteMap() {
-  std::string map;
+re2::String Prog::DumpByteMap() {
+  re2::String map;
   for (int c = 0; c < 256; c++) {
     int b = bytemap_[c];
     int lo = c;
     while (c < 256-1 && bytemap_[c+1] == b)
       c++;
     int hi = c;
-    map += absl::StrFormat("[%02x-%02x] -> %d\n", lo, hi, b);
+    map += re2::internal::StrFormat("[%02x-%02x] -> %d\n", lo, hi, b);
   }
   return map;
 }
@@ -205,7 +200,7 @@ static bool IsMatch(Prog* prog, Prog::Inst* ip) {
   for (;;) {
     switch (ip->opcode()) {
       default:
-        ABSL_LOG(DFATAL) << "Unexpected opcode in IsMatch: " << ip->opcode();
+        RE2_LOG(DFATAL) << "Unexpected opcode in IsMatch: " << ip->opcode();
         return false;
 
       case kInstAlt:
@@ -290,7 +285,7 @@ void Prog::Optimize() {
   }
 }
 
-uint32_t Prog::EmptyFlags(absl::string_view text, const char* p) {
+uint32_t Prog::EmptyFlags(re2::StringView text, const char* p) {
   int flags = 0;
 
   // ^ and \A
@@ -361,19 +356,19 @@ class ByteMapBuilder {
   Bitmap256 splits_;
   int colors_[256];
   int nextcolor_;
-  std::vector<std::pair<int, int>> colormap_;
-  std::vector<std::pair<int, int>> ranges_;
+  re2::Vector<std::pair<int, int>> colormap_;
+  re2::Vector<std::pair<int, int>> ranges_;
 
   ByteMapBuilder(const ByteMapBuilder&) = delete;
   ByteMapBuilder& operator=(const ByteMapBuilder&) = delete;
 };
 
 void ByteMapBuilder::Mark(int lo, int hi) {
-  ABSL_DCHECK_GE(lo, 0);
-  ABSL_DCHECK_GE(hi, 0);
-  ABSL_DCHECK_LE(lo, 255);
-  ABSL_DCHECK_LE(hi, 255);
-  ABSL_DCHECK_LE(lo, hi);
+  RE2_DCHECK_GE(lo, 0);
+  RE2_DCHECK_GE(hi, 0);
+  RE2_DCHECK_LE(lo, 255);
+  RE2_DCHECK_LE(hi, 255);
+  RE2_DCHECK_LE(lo, hi);
 
   // Ignore any [0-255] ranges. They cause us to recolor every range, which
   // has no effect on the eventual result and is therefore a waste of time.
@@ -384,7 +379,7 @@ void ByteMapBuilder::Mark(int lo, int hi) {
 }
 
 void ByteMapBuilder::Merge() {
-  for (std::vector<std::pair<int, int>>::const_iterator it = ranges_.begin();
+  for (re2::Vector<std::pair<int, int>>::const_iterator it = ranges_.begin();
        it != ranges_.end();
        ++it) {
     int lo = it->first-1;
@@ -436,7 +431,7 @@ int ByteMapBuilder::Recolor(int oldcolor) {
   // colors and there will typically be far fewer than that.
   // Also, we need to consider keys *and* values in order to
   // avoid recoloring a given range more than once per batch.
-  std::vector<std::pair<int, int>>::const_iterator it =
+  re2::Vector<std::pair<int, int>>::const_iterator it =
       std::find_if(colormap_.begin(), colormap_.end(),
                    [=](const std::pair<int, int>& kv) -> bool {
                      return kv.first == oldcolor || kv.second == oldcolor;
@@ -518,7 +513,7 @@ void Prog::ComputeByteMap() {
   builder.Build(bytemap_, &bytemap_range_);
 
   if ((0)) {  // For debugging, use trivial bytemap.
-    ABSL_LOG(ERROR) << "Using trivial bytemap.";
+    RE2_LOG(ERROR) << "Using trivial bytemap.";
     for (int i = 0; i < 256; i++)
       bytemap_[i] = static_cast<uint8_t>(i);
     bytemap_range_ = 256;
@@ -568,14 +563,14 @@ void Prog::Flatten() {
   // Scratch structures. It's important that these are reused by functions
   // that we call in loops because they would thrash the heap otherwise.
   SparseSet reachable(size());
-  std::vector<int> stk;
+  re2::Vector<int> stk;
   stk.reserve(size());
 
   // First pass: Marks "successor roots" and predecessors.
   // Builds the mapping from inst-ids to root-ids.
   SparseArray<int> rootmap(size());
   SparseArray<int> predmap(size());
-  std::vector<std::vector<int>> predvec;
+  re2::Vector<re2::Vector<int>> predvec;
   MarkSuccessors(&rootmap, &predmap, &predvec, &reachable, &stk);
 
   // Second pass: Marks "dominator roots".
@@ -590,8 +585,8 @@ void Prog::Flatten() {
 
   // Third pass: Emits "lists". Remaps outs to root-ids.
   // Builds the mapping from root-ids to flat-ids.
-  std::vector<int> flatmap(rootmap.size());
-  std::vector<Inst> flat;
+  re2::Vector<int> flatmap(rootmap.size());
+  re2::Vector<Inst> flat;
   flat.reserve(size());
   for (SparseArray<int>::const_iterator i = rootmap.begin();
        i != rootmap.end();
@@ -622,12 +617,12 @@ void Prog::Flatten() {
   size_t total = 0;
   for (int i = 0; i < kNumInst; i++)
     total += inst_count_[i];
-  ABSL_CHECK_EQ(total, flat.size());
+  RE2_CHECK_EQ(total, flat.size());
 #endif
 
   // Remap start_unanchored and start.
   if (start_unanchored() == 0) {
-    ABSL_DCHECK_EQ(start(), 0);
+    RE2_DCHECK_EQ(start(), 0);
   } else if (start_unanchored() == start()) {
     set_start_unanchored(flatmap[1]);
     set_start(flatmap[1]);
@@ -659,8 +654,8 @@ void Prog::Flatten() {
 
 void Prog::MarkSuccessors(SparseArray<int>* rootmap,
                           SparseArray<int>* predmap,
-                          std::vector<std::vector<int>>* predvec,
-                          SparseSet* reachable, std::vector<int>* stk) {
+                          re2::Vector<re2::Vector<int>>* predvec,
+                          SparseSet* reachable, re2::Vector<int>* stk) {
   // Mark the kInstFail instruction.
   rootmap->set_new(0, rootmap->size());
 
@@ -684,7 +679,7 @@ void Prog::MarkSuccessors(SparseArray<int>* rootmap,
     Inst* ip = inst(id);
     switch (ip->opcode()) {
       default:
-        ABSL_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
+        RE2_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
         break;
 
       case kInstAltMatch:
@@ -723,8 +718,8 @@ void Prog::MarkSuccessors(SparseArray<int>* rootmap,
 
 void Prog::MarkDominator(int root, SparseArray<int>* rootmap,
                          SparseArray<int>* predmap,
-                         std::vector<std::vector<int>>* predvec,
-                         SparseSet* reachable, std::vector<int>* stk) {
+                         re2::Vector<re2::Vector<int>>* predvec,
+                         SparseSet* reachable, re2::Vector<int>* stk) {
   reachable->clear();
   stk->clear();
   stk->push_back(root);
@@ -744,7 +739,7 @@ void Prog::MarkDominator(int root, SparseArray<int>* rootmap,
     Inst* ip = inst(id);
     switch (ip->opcode()) {
       default:
-        ABSL_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
+        RE2_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
         break;
 
       case kInstAltMatch:
@@ -786,8 +781,8 @@ void Prog::MarkDominator(int root, SparseArray<int>* rootmap,
 }
 
 void Prog::EmitList(int root, SparseArray<int>* rootmap,
-                    std::vector<Inst>* flat,
-                    SparseSet* reachable, std::vector<int>* stk) {
+                    re2::Vector<Inst>* flat,
+                    SparseSet* reachable, re2::Vector<int>* stk) {
   reachable->clear();
   stk->clear();
   stk->push_back(root);
@@ -811,7 +806,7 @@ void Prog::EmitList(int root, SparseArray<int>* rootmap,
     Inst* ip = inst(id);
     switch (ip->opcode()) {
       default:
-        ABSL_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
+        RE2_LOG(DFATAL) << "unhandled opcode: " << ip->opcode();
         break;
 
       case kInstAltMatch:
@@ -855,7 +850,7 @@ void Prog::EmitList(int root, SparseArray<int>* rootmap,
 // colors are instructions and recoloring ranges precisely identifies conflicts
 // between instructions. Iterating backwards over [begin, end) is guaranteed to
 // identify the nearest conflict (if any) with only linear complexity.
-void Prog::ComputeHints(std::vector<Inst>* flat, int begin, int end) {
+void Prog::ComputeHints(re2::Vector<Inst>* flat, int begin, int end) {
   Bitmap256 splits;
   int colors[256];
 
@@ -936,9 +931,9 @@ void Prog::ComputeHints(std::vector<Inst>* flat, int begin, int end) {
 // loop and thus avoids the spilling that can occur when building with Clang.
 static const size_t kShiftDFAFinal = 9;
 
-// This function takes the prefix as std::string (i.e. not const std::string&
+// This function takes the prefix as re2::String (i.e. not const re2::String&
 // as normal) because it's going to clobber it, so a temporary is convenient.
-static uint64_t* BuildShiftDFA(std::string prefix) {
+static uint64_t* BuildShiftDFA(re2::String prefix) {
   // This constant is for convenience now and also for correctness later when
   // we clobber the prefix, but still need to know how long it was initially.
   const size_t size = prefix.size();
@@ -1017,7 +1012,7 @@ static uint64_t* BuildShiftDFA(std::string prefix) {
   return dfa;
 }
 
-void Prog::ConfigurePrefixAccel(const std::string& prefix,
+void Prog::ConfigurePrefixAccel(const re2::String& prefix,
                                 bool prefix_foldcase) {
   prefix_foldcase_ = prefix_foldcase;
   prefix_size_ = prefix.size();
@@ -1112,7 +1107,7 @@ const void* Prog::PrefixAccel_ShiftDFA(const void* data, size_t size) {
 #if defined(__AVX2__)
 // Finds the least significant non-zero bit in n.
 static int FindLSBSet(uint32_t n) {
-  ABSL_DCHECK_NE(n, uint32_t{0});
+  RE2_DCHECK_NE(n, uint32_t{0});
 #if defined(__GNUC__)
   return __builtin_ctz(n);
 #elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
@@ -1134,7 +1129,7 @@ static int FindLSBSet(uint32_t n) {
 #endif
 
 const void* Prog::PrefixAccel_FrontAndBack(const void* data, size_t size) {
-  ABSL_DCHECK_GE(prefix_size_, size_t{2});
+  RE2_DCHECK_GE(prefix_size_, size_t{2});
   if (size < prefix_size_)
     return NULL;
   // Don't bother searching the last prefix_size_-1 bytes for prefix_front_.
@@ -1171,7 +1166,7 @@ const void* Prog::PrefixAccel_FrontAndBack(const void* data, size_t size) {
 
   const char* p0 = reinterpret_cast<const char*>(data);
   for (const char* p = p0;; p++) {
-    ABSL_DCHECK_GE(size, static_cast<size_t>(p-p0));
+    RE2_DCHECK_GE(size, static_cast<size_t>(p-p0));
     p = reinterpret_cast<const char*>(memchr(p, prefix_front_, size - (p-p0)));
     if (p == NULL || p[prefix_size_-1] == prefix_back_)
       return p;
