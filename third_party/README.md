@@ -19,6 +19,8 @@ Vendored header dependencies (no external downloads are needed to build RE2):
   [clapdb/smallstring#14](https://github.com/clapdb/smallstring/pull/14).
   The aliased-insertion and string-view replacement fixes are also included upstream via [clapdb/smallstring#15](https://github.com/clapdb/smallstring/pull/15) and
   [clapdb/smallstring#16](https://github.com/clapdb/smallstring/pull/16).
+  The single-pass iterator construction fix is applied locally and proposed upstream in
+  [clapdb/smallstring#17](https://github.com/clapdb/smallstring/pull/17).
 - fmt: https://github.com/fmtlib/fmt at 9908d00037d58233bcb1a7c99153bb96363994df.
   Only base.h, format.h and format-inl.h are needed by SmallString's formatter declarations.
   RE2 does not instantiate fmt formatting functions; its diagnostics use C stdio.

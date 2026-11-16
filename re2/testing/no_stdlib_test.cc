@@ -166,7 +166,43 @@ static int CheckAliasedVectorAssign() {
   return 0;
 }
 
+// Copies share a cursor, just as stream iterators share their input stream.
+struct SinglePassChars {
+  using value_type = char;
+  using difference_type = ptrdiff_t;
+  using pointer = const char*;
+  using reference = const char&;
+  using iterator_category = std::input_iterator_tag;
+  const char** cursor;
+  const char* end;
+  bool sentinel;
+  reference operator*() const { return **cursor; }
+  SinglePassChars& operator++() { ++*cursor; return *this; }
+  SinglePassChars operator++(int) { auto copy = *this; ++*this; return copy; }
+  friend bool operator==(SinglePassChars a, SinglePassChars b) {
+    return a.cursor == b.cursor &&
+           (a.sentinel == b.sentinel || *a.cursor == a.end);
+  }
+};
+static_assert(std::input_iterator<SinglePassChars>);
+static_assert(!std::forward_iterator<SinglePassChars>);
+
+static int CheckSinglePassStringConstruction() {
+  for (size_t length : {size_t(0), size_t(3), size_t(9), size_t(100), size_t(16384)}) {
+    re2::String expected(length, 'x');
+    if (length > 2) expected[1] = '\0';
+    const char* cursor = expected.data();
+    re2::String value(SinglePassChars{&cursor, expected.data() + length, false},
+                      SinglePassChars{&cursor, expected.data() + length, true});
+    VERIFY(value == expected);
+    VERIFY(cursor == expected.data() + length);
+    VERIFY(value.c_str()[length] == '\0');
+  }
+  return 0;
+}
+
 int main() {
+  VERIFY(CheckSinglePassStringConstruction() == 0);
   VERIFY(CheckAliasedVectorAssign() == 0);
   VERIFY(CheckAliasedVectorInsert() == 0);
   VERIFY(CheckAliasedVectorResize() == 0);
